@@ -197,7 +197,7 @@ export interface MockDb {
   session: { accountType: "환자" | "의료진"; id: number } | null;
 }
 
-const VERSION = 3;
+const VERSION = 4;
 const STORAGE_KEY = "mock:db";
 const ALL_DAYS: DayOfWeek[] = ["월", "화", "수", "목", "금", "토", "일"];
 
@@ -223,7 +223,7 @@ function seed(): MockDb {
     return s!.schedule_id;
   };
 
-  return {
+  const base: MockDb = {
     version: VERSION,
     seededOn: t,
     departments: [
@@ -310,6 +310,8 @@ function seed(): MockDb {
       { disease_code: "R07.4", name: "상세불명의 흉통" },
       { disease_code: "S93.4", name: "발목 염좌" },
       { disease_code: "Z00.0", name: "일반 건강검진" },
+      { disease_code: "J18.9", name: "상세불명의 폐렴" },
+      { disease_code: "A09", name: "감염성 위장염" },
     ],
     drugs: [
       { drug_code: "D201", name: "타이레놀정 500mg", ingredient: "아세트아미노펜", form: "정제", unit: "정", unit_price: 120 },
@@ -336,6 +338,107 @@ function seed(): MockDb {
     ],
     session: null,
   };
+  addInpatientSamples(base, at, sid);
+  return base;
+}
+
+/**
+ * 2순위 입원 표본 (Figma S5·S5a·S5b·S2b·P1a와 같은 구성)
+ * - 501호 2/4 (최다온·박로운), 502호 3/4 (이정민 외 2), 503호 4/4 만실, 504호 0/2
+ * - 이정민 #08122: D+6, 회진 3건, 오늘 퇴원 예정 / 박로운: 오늘 퇴원 예정 / 최다온: 퇴원 예정 미정
+ * - 김서현 #09412: 어제 입원 결정, 병실 배정 대기 (결제도 입원도 없는 외래 진료)
+ * - 김서연: 작년 지난 입원 1건 (P1a 지난 입원, P6 입원 청구)
+ * 입원에는 환자번호가 없으므로 모두 결정 진료(외래, 예약 '완료', 결제 없음)를 거칩니다.
+ */
+function addInpatientSamples(d: MockDb, at: (dayOffset: number, time: string) => string, sid: (doctorId: number, dayOffset: number, afternoon?: boolean) => number) {
+  let reservationId = 2001;
+  let encounterId = 5600;
+  let examId = 3400;
+  let prescriptionId = 7100;
+  const day = (dayOffset: number) => at(dayOffset, "").slice(0, 10);
+
+  /** 결정 진료: 예약('완료') + 외래 진료 + 주진단 */
+  function decision(patientId: number, doctorId: number, dayOffset: number, time: string, diseaseCode: string, finding: string, symptom: string | null = null) {
+    const rid = reservationId++;
+    const eid = encounterId++;
+    const slot = `${time.slice(0, 3)}${Number(time.slice(3, 5)) < 30 ? "00" : "30"}:00`;
+    d.reservations.push({ reservation_id: rid, patient_id: patientId, schedule_id: sid(doctorId, dayOffset, Number(time.slice(0, 2)) >= 13), appointment_at: at(dayOffset, slot), status: "완료", created_at: at(dayOffset - 2, "20:00:00"), symptom_note: symptom });
+    d.encounters.push({ encounter_id: eid, patient_id: patientId, doctor_id: doctorId, reservation_id: rid, admission_id: null, encounter_at: at(dayOffset, time), encounter_type: "외래", symptom, finding });
+    d.diagnoses.push({ encounter_id: eid, disease_code: diseaseCode, is_primary: "Y" });
+    return eid;
+  }
+  function round(admissionId: number, patientId: number, doctorId: number, dayOffset: number, time: string, finding: string, symptom: string | null = null) {
+    const eid = encounterId++;
+    d.encounters.push({ encounter_id: eid, patient_id: patientId, doctor_id: doctorId, reservation_id: null, admission_id: admissionId, encounter_at: at(dayOffset, time), encounter_type: "입원", symptom, finding });
+    return eid;
+  }
+  function exam(encounter: number, code: string, requestedAt: string, done?: { performedAt: string; value: number | null; flag: "정상" | "이상"; note: string; reader: number }) {
+    d.exams.push({
+      exam_id: examId++,
+      encounter_id: encounter,
+      exam_code: code,
+      reader_id: done?.reader ?? null,
+      requested_at: requestedAt,
+      performed_at: done?.performedAt ?? null,
+      status: done ? "완료" : "요청",
+      result_value: done?.value ?? null,
+      result_flag: done?.flag ?? null,
+      reading_note: done?.note ?? null,
+    });
+  }
+
+  d.patients.push(
+    { patient_id: 8122, name: "이정민", birth_date: "1981-04-17", gender: "남", phone: "010-5550-8122", address: "서울 동대문구 회기로", blood_type: "B형 (Rh+)", login_id: "jungmin81", password: "demo1234" },
+    { patient_id: 8311, name: "최다온", birth_date: "1952-07-09", gender: "여", phone: "010-5550-8311", address: null, blood_type: null, login_id: null, password: null },
+    { patient_id: 8350, name: "박로운", birth_date: "1990-12-01", gender: "남", phone: "010-5550-8350", address: null, blood_type: null, login_id: null, password: null },
+  );
+
+  // 이정민: 6일 전 외래에서 입원 결정 → 502호, 회진 3건, 오늘 퇴원 예정
+  const ljm = decision(8122, 12, -6, "09:40:00", "K35.8", "우하복부 압통, 반발통. 충수염 의심, 수술 후 입원 관찰.", "오른쪽 아랫배 통증");
+  exam(ljm, "R201", at(-6, "09:40:00"), { performedAt: at(-6, "10:05:00"), value: null, flag: "정상", note: "특이 소견 없음.", reader: 12 });
+  d.admissions.push({ admission_id: 731, decision_encounter_id: ljm, attending_id: 12, room_no: 502, admitted_at: at(-6, "10:20:00"), expected_discharge_date: day(0), discharged_at: null, reason: "급성 충수염 수술 후 관찰" });
+  round(731, 8122, 12, -3, "08:30:00", "수술 부위 양호");
+  const r2 = round(731, 8122, 15, -2, "08:45:00", "미열 37.6, 경과 관찰", "미열");
+  exam(r2, "L101", at(-2, "08:45:00"), { performedAt: at(-2, "09:30:00"), value: 10.6, flag: "이상", note: "백혈구 경미한 증가. 항생제 유지.", reader: 15 });
+  d.prescriptions.push({ prescription_id: prescriptionId, encounter_id: r2, prescribed_at: at(-2, "08:45:00"), dispense_type: "원내" });
+  d.prescriptionItems.push({ prescription_id: prescriptionId++, drug_code: "D550", dose: 1, times_per_day: 2, duration_days: 3, instruction: "정맥 주사" });
+  const r3 = round(731, 8122, 12, -1, "08:30:00", "배액량 감소, 식이 시작");
+  exam(r3, "F301", at(-1, "08:30:00"));
+
+  // 최다온: 3주 전 입원, 501호, 주치의 이도윤, 퇴원 예정 미정
+  const cdo = decision(8311, 15, -21, "10:10:00", "E11.9", "혈당 조절 불량, 발 궤양 동반. 입원 치료.");
+  d.admissions.push({ admission_id: 720, decision_encounter_id: cdo, attending_id: 15, room_no: 501, admitted_at: at(-21, "11:00:00"), expected_discharge_date: null, discharged_at: null, reason: "당뇨 합병증 혈당 조절" });
+  round(720, 8311, 15, -1, "09:00:00", "공복 혈당 142. 인슐린 용량 유지.");
+
+  // 박로운: 3일 전 입원, 501호, 오늘 퇴원 예정
+  const pro = decision(8350, 12, -3, "14:20:00", "A09", "탈수 동반 급성 장염. 수액 치료 위해 입원.");
+  d.admissions.push({ admission_id: 735, decision_encounter_id: pro, attending_id: 12, room_no: 501, admitted_at: at(-3, "15:00:00"), expected_discharge_date: day(0), discharged_at: null, reason: "급성 장염 수액 치료" });
+  round(735, 8350, 12, -1, "08:50:00", "설사 멈춤, 경구 섭취 양호");
+
+  // 채우기 입원: 502호 2명, 503호 4명(만실)
+  const fillers: [number, string, string, "남" | "여", number, number][] = [
+    [8401, "윤채원", "1979-02-11", "여", 502, -4],
+    [8402, "장민호", "1966-09-23", "남", 502, -8],
+    [8403, "서유진", "1988-05-30", "여", 503, -2],
+    [8404, "임도현", "1971-03-15", "남", 503, -5],
+    [8405, "조하린", "1958-10-07", "여", 503, -9],
+    [8406, "배준서", "1983-08-19", "남", 503, -12],
+  ];
+  fillers.forEach(([pid, name, birth, gender, room, offset], i) => {
+    d.patients.push({ patient_id: pid, name, birth_date: birth, gender, phone: `010-5550-${pid}`, address: null, blood_type: null, login_id: null, password: null });
+    const eid = decision(pid, i % 2 ? 15 : 12, offset, "11:10:00", "J18.9", "폐렴 의심. 정맥 항생제 치료 위해 입원.");
+    d.admissions.push({ admission_id: 740 + i, decision_encounter_id: eid, attending_id: i % 2 ? 15 : 12, room_no: room, admitted_at: at(offset, "13:00:00"), expected_discharge_date: day(Math.max(1, 6 + offset + i)), discharged_at: null, reason: "폐렴 정맥 항생제 치료" });
+  });
+
+  // 김서현: 어제 외래에서 입원 결정, 병실 배정 대기
+  decision(9412, 12, -1, "09:40:00", "J18.9", "고열과 기침, 흉부 청진상 수포음. 폐렴 의심, 입원 치료 필요.", "고열, 기침 5일");
+
+  // 김서연: 작년 지난 입원 (4일, 501호) → 퇴원 청구 완료
+  const ksy = decision(10234, 12, -420, "10:10:00", "A09", "구토·설사로 탈수. 수액 치료 위해 입원.", "구토, 설사");
+  d.admissions.push({ admission_id: 610, decision_encounter_id: ksy, attending_id: 12, room_no: 501, admitted_at: at(-420, "11:00:00"), expected_discharge_date: day(-416), discharged_at: at(-416, "10:00:00"), reason: "급성 위장염 탈수 치료" });
+  round(610, 10234, 12, -418, "08:40:00", "탈수 교정됨, 미음 시작");
+  // 진찰 15,000 + 입원료 60,000 × 4일
+  d.payments.push({ payment_id: 8800, encounter_id: ksy, amount: 255000, created_at: at(-416, "10:00:00"), method: "카드", status: "완료", paid_at: at(-416, "10:30:00") });
 }
 
 let cache: MockDb | null = null;
@@ -372,11 +475,14 @@ export function nextId<T>(rows: T[], key: keyof T) {
   return rows.reduce((max, r) => Math.max(max, Number(r[key])), 0) + 1;
 }
 
-/** 시연 패널의 빠른 로그인용 계정 목록 (환자는 앞의 셋만) */
+/** 시연 패널의 빠른 로그인용 환자: 외래 표본 셋 + 입원 중인 이정민 */
+const DEMO_PATIENTS = [10234, 10388, 9412, 8122];
+
+/** 시연 패널의 빠른 로그인용 계정 목록 */
 export function demoAccounts() {
   const d = db();
   return [
-    ...d.patients.slice(0, 3).filter((p) => p.login_id).map((p) => ({ accountType: "환자" as const, role: "환자", name: p.name, loginId: p.login_id!, password: p.password! })),
+    ...DEMO_PATIENTS.map((id) => d.patients.find((p) => p.patient_id === id)!).filter((p) => p?.login_id).map((p) => ({ accountType: "환자" as const, role: "환자", name: p.name, loginId: p.login_id!, password: p.password! })),
     ...d.staff.map((s) => ({ accountType: "의료진" as const, role: s.job_type, name: s.name, loginId: s.login_id, password: s.password })),
   ];
 }

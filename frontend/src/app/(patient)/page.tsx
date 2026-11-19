@@ -1,9 +1,9 @@
 "use client";
 
 /**
- * P1 홈 — API 1-5, 2-4, 6-3, 4-4
+ * P1 홈 — API 1-5, 2-4, 6-3, 4-4, 5-7
  * 지금 챙겨야 할 것 순서: 다음 예약(가장 크게) → 미결제 진료비 → 새 검사 결과, 그리고 내 정보.
- * 입원 카드(5-7)는 2순위에서 붙입니다.
+ * 입원 중이면 맨 위에 입원 카드를 두고 P1a 입원 내역으로 이어 줍니다.
  */
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
@@ -13,6 +13,7 @@ import { paymentApi, paymentKeys } from "@/lib/api/payment";
 import { reservationApi, reservationKeys } from "@/lib/api/reservation";
 import { useAuth } from "@/lib/auth";
 import { longDate, now, shortDate, timeOf, won, patientNo } from "@/lib/date";
+import { AdmissionCard } from "@/components/inpatient";
 import { QueryView } from "@/components/query-view";
 import { Card, Chip } from "@/components/ui";
 
@@ -36,6 +37,8 @@ export default function HomePage() {
           진료 예약하기
         </Link>
       </div>
+
+      <AdmissionCard />
 
       <div className="grid grid-cols-[3fr_2fr] gap-6">
         {/* 다음 예약 */}

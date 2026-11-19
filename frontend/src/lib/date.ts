@@ -65,6 +65,15 @@ export function longDate(value: string) {
   return `${year}${d.getMonth() + 1}월 ${d.getDate()}일(${DAYS[d.getDay()]})`;
 }
 
+/** 두 날짜 사이 일수(날짜만 비교). 입원 "D+6", 재원 일수에 씀 */
+export function daysBetween(from: string, to: string = today()) {
+  return Math.round((parse(to.slice(0, 10)).getTime() - parse(from.slice(0, 10)).getTime()) / 86_400_000);
+}
+
+/** datetime-local 입력칸 값 "2026-11-11T10:00" ↔ API "2026-11-11T10:00:00" */
+export const toInputDateTime = (value: string) => value.slice(0, 16);
+export const fromInputDateTime = (value: string) => (value.length === 16 ? `${value}:00` : value);
+
 /** 만 나이 */
 export function age(birthDate: string, on = today()) {
   const b = parse(birthDate);

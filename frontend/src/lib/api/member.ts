@@ -1,6 +1,6 @@
 /** 01 회원 관리 (배성진) — docs/api/01-member.md */
 import { api } from "./client";
-import type { Department, LoginRequest, PatientDetail, PatientProfile, SessionUser, SignupRequest } from "./types";
+import type { Department, JobType, LoginRequest, PatientDetail, PatientProfile, SessionUser, SignupRequest, Staff } from "./types";
 
 /** 쿼리 키 묶음. 화면에서는 배열을 직접 적지 않고 이것만 씁니다. (로그인 정보 키는 lib/auth의 ME_KEY) */
 export const memberKeys = {
@@ -8,6 +8,7 @@ export const memberKeys = {
   profile: () => [...memberKeys.all, "profile"] as const,
   patient: (patientId: number) => [...memberKeys.all, "patient", patientId] as const,
   departments: () => [...memberKeys.all, "departments"] as const,
+  staff: (jobType?: JobType, departmentCode?: string) => [...memberKeys.all, "staff", jobType ?? "", departmentCode ?? ""] as const,
 };
 
 export const memberApi = {
@@ -25,4 +26,6 @@ export const memberApi = {
   patient: (patientId: number) => api.get<PatientDetail>(`/api/patients/${patientId}`),
   /** 1-7 진료과 목록 */
   departments: () => api.get<Department[]>("/api/departments"),
+  /** 1-8 의료진 목록 (주치의는 jobType=의사) */
+  staff: (jobType?: JobType, departmentCode?: string) => api.get<Staff[]>("/api/staff", { jobType, departmentCode }),
 };

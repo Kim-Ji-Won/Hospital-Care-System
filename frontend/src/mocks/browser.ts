@@ -12,6 +12,7 @@ import { memberHandlers } from "./handlers/member";
 import { reservationHandlers } from "./handlers/reservation";
 import { encounterHandlers } from "./handlers/encounter";
 import { orderHandlers } from "./handlers/order";
+import { admissionHandlers } from "./handlers/admission";
 import { paymentHandlers } from "./handlers/payment";
 
 /** 영역 이름은 docs/api 파일 이름과 같습니다. 화면을 만들 때마다 여기에 더합니다. */
@@ -20,10 +21,22 @@ const handlersByArea: Record<string, RequestHandler[]> = {
   reservation: reservationHandlers,
   encounter: encounterHandlers,
   order: orderHandlers,
+  admission: admissionHandlers,
   payment: paymentHandlers,
 };
 
-export async function startMockWorker() {
+/**
+ * 한 번만 켭니다. 개발 모드의 StrictMode가 effect를 두 번 부르면 워커가 둘 생기고,
+ * 같은 POST를 두 핸들러가 각각 처리해 회진 같은 기록이 두 번 저장됩니다.
+ */
+let starting: Promise<void> | null = null;
+
+export function startMockWorker() {
+  starting ??= start();
+  return starting;
+}
+
+async function start() {
   const areas = mockedAreas();
   if (areas === "none") return;
   const names = areas === "all" ? Object.keys(handlersByArea) : areas;
