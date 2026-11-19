@@ -11,7 +11,7 @@ import { useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { reservationApi, reservationKeys } from "@/lib/api/reservation";
 import type { MyReservation } from "@/lib/api/types";
-import { longDate, now, shortDateTime, timeOf } from "@/lib/date";
+import { longDate, shortDateTime, timeOf, today } from "@/lib/date";
 import { QueryView } from "@/components/query-view";
 import { Chip, PageHeader } from "@/components/ui";
 
@@ -72,9 +72,10 @@ function CreatedBanner({ list }: { list: MyReservation[] }) {
 }
 
 function ReservationTable({ list }: { list: MyReservation[] }) {
-  const nowAt = now();
+  const todayDate = today();
   // 한 표에 섞으면 날짜가 올라가다 내려가므로 둘로 나눔: 다가오는 예약은 가까운 순, 지난 예약은 최근 순
-  const isUpcoming = (r: MyReservation) => r.status === "예약" && r.appointmentAt >= nowAt;
+  // 오늘의 '예약'은 시간이 지나도 아직 진료·노쇼 처리 전이므로 다가오는 예약에 둠
+  const isUpcoming = (r: MyReservation) => r.status === "예약" && r.appointmentAt.slice(0, 10) >= todayDate;
   const upcoming = list.filter(isUpcoming).sort((a, b) => a.appointmentAt.localeCompare(b.appointmentAt));
   const past = list.filter((r) => !isUpcoming(r)).sort((a, b) => b.appointmentAt.localeCompare(a.appointmentAt));
 

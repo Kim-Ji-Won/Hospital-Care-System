@@ -4,7 +4,7 @@ import type { CreateEncounterRequest } from "@/lib/api/types";
 import { now } from "@/lib/date";
 import { db, nextId, save } from "../db";
 import { apiError, requireRole, validationError } from "../http";
-import { createPayment, outpatientAmount, toEncounterDetail } from "../logic";
+import { createPayment, currentAdmissionOf, outpatientAmount, patientIdOfAdmission, toEncounterDetail } from "../logic";
 
 /** 3-1의 입력 검사. 문제 있는 칸 이름(prescriptions[0].items[1].dose 형식)과 이유를 돌려줌 */
 function validate(b: Partial<CreateEncounterRequest>) {
@@ -51,7 +51,7 @@ function validate(b: Partial<CreateEncounterRequest>) {
 }
 
 export const encounterHandlers = [
-  // 3-1 진료 기록 저장 (외래만. 회진은 2순위에서)
+  // 3-1 진료 기록 저장 (외래·회진)
   http.post("/api/encounters", async ({ request }) => {
     const { user, deny } = requireRole("의사");
     if (deny) return deny;
@@ -60,26 +60,41 @@ export const encounterHandlers = [
     if (Object.keys(fields).length > 0) return validationError(fields);
 
     const d = db();
-    if (b.admissionId != null) return apiError(404, "NOT_FOUND", "입원(회진)은 목 서버에 아직 없습니다.");
-    const reservation = d.reservations.find((r) => r.reservation_id === b.reservationId);
-    if (!reservation) return apiError(404, "NOT_FOUND", "없는 예약번호입니다.");
-    if (reservation.status !== "예약") return apiError(409, "INVALID_STATUS", "상태가 '예약'인 예약만 진료를 저장할 수 있습니다.");
-    if (b.admissionDecided) {
-      const current = d.admissions.find((a) => !a.discharged_at && d.encounters.find((e) => e.encounter_id === a.decision_encounter_id)?.patient_id === reservation.patient_id);
-      if (current) return apiError(409, "ALREADY_ADMITTED", "이미 입원 중인 환자입니다.", { details: { admissionId: current.admission_id, roomNo: current.room_no } });
+    const at = now();
+
+    // 외래는 예약, 회진은 입원과 짝
+    let patientId: number;
+    let encounterAt = at;
+    const reservation = b.reservationId != null ? d.reservations.find((r) => r.reservation_id === b.reservationId) : undefined;
+    const admission = b.admissionId != null ? d.admissions.find((a) => a.admission_id === b.admissionId) : undefined;
+    if (b.reservationId != null) {
+      if (!reservation) return apiError(404, "NOT_FOUND", "없는 예약번호입니다.");
+      if (reservation.status !== "예약") return apiError(409, "INVALID_STATUS", "상태가 '예약'인 예약만 진료를 저장할 수 있습니다.");
+      patientId = reservation.patient_id;
+      if (b.admissionDecided) {
+        const current = currentAdmissionOf(patientId);
+        if (current) return apiError(409, "ALREADY_ADMITTED", "이미 입원 중인 환자입니다.", { details: { admissionId: current.admission_id, roomNo: current.room_no } });
+      }
+    } else {
+      if (!admission) return apiError(404, "NOT_FOUND", "없는 입원번호입니다.");
+      if (admission.discharged_at) return apiError(409, "INVALID_STATUS", "이미 퇴원한 입원입니다.");
+      patientId = patientIdOfAdmission(admission);
+      if (b.encounterAt) {
+        encounterAt = b.encounterAt.length === 16 ? `${b.encounterAt}:00` : b.encounterAt;
+        if (encounterAt < admission.admitted_at || encounterAt > at) return validationError({ encounterAt: "회진 일시는 입원 이후, 지금 이전이어야 합니다." });
+      }
     }
 
-    // 한 트랜잭션: 진료 → 진단 → 처방 → 검사 → 예약 '완료' → (입원 결정이 아니면) 결제 '미결제'
-    const at = now();
+    // 한 트랜잭션: 진료 → 진단 → 처방 → 검사 → (외래) 예약 '완료' → (외래이고 입원 결정이 아니면) 결제 '미결제'
     const encounterId = nextId(d.encounters, "encounter_id");
     d.encounters.push({
       encounter_id: encounterId,
-      patient_id: reservation.patient_id,
+      patient_id: patientId,
       doctor_id: user.staffId!,
-      reservation_id: reservation.reservation_id,
-      admission_id: null,
-      encounter_at: at,
-      encounter_type: "외래",
+      reservation_id: reservation?.reservation_id ?? null,
+      admission_id: admission?.admission_id ?? null,
+      encounter_at: encounterAt,
+      encounter_type: reservation ? "외래" : "입원",
       symptom: b.symptom?.trim() || null,
       finding: b.finding!.trim(),
     });
@@ -94,12 +109,24 @@ export const encounterHandlers = [
     for (const x of b.exams ?? []) {
       d.exams.push({ exam_id: nextId(d.exams, "exam_id"), encounter_id: encounterId, exam_code: x.examCode, reader_id: null, requested_at: at, performed_at: null, status: "요청", result_value: null, result_flag: null, reading_note: null });
     }
-    reservation.status = "완료";
-    const payment = b.admissionDecided ? null : createPayment(encounterId, outpatientAmount(encounterId));
+    // 회진에는 결제를 만들지 않음: 검사와 원내 처방은 퇴원 때 입원 청구에 합산
+    let paymentId: number | null = null;
+    if (reservation) {
+      reservation.status = "완료";
+      if (!b.admissionDecided) paymentId = createPayment(encounterId, outpatientAmount(encounterId)).payment_id;
+    }
     save();
 
     return HttpResponse.json(
-      { encounterId, encounterType: "외래", encounterAt: at, reservationId: reservation.reservation_id, admissionId: null, admissionDecided: !!b.admissionDecided, paymentId: payment?.payment_id ?? null },
+      {
+        encounterId,
+        encounterType: reservation ? "외래" : "입원",
+        encounterAt,
+        reservationId: reservation?.reservation_id ?? null,
+        admissionId: admission?.admission_id ?? null,
+        admissionDecided: !!b.admissionDecided,
+        paymentId,
+      },
       { status: 201 },
     );
   }),

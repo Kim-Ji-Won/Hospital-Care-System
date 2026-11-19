@@ -1,6 +1,6 @@
-/** 01 회원 관리 목 핸들러 — docs/api/01-member.md 1-1 ~ 1-7 */
+/** 01 회원 관리 목 핸들러 — docs/api/01-member.md 1-1 ~ 1-8 */
 import { http, HttpResponse } from "msw";
-import type { Department, LoginRequest, PatientDetail, PatientProfile, SignupRequest } from "@/lib/api/types";
+import type { Department, LoginRequest, PatientDetail, PatientProfile, SignupRequest, Staff } from "@/lib/api/types";
 import { db, save, type PatientRow } from "../db";
 import { apiError, requireRole, sessionUser, validationError } from "../http";
 import { departmentOf, staffOf, toMyReservation } from "../logic";
@@ -154,6 +154,30 @@ export const memberHandlers = [
         staffCount: d.staff.filter((s) => s.department_code === x.department_code).length,
       }))
       .sort((a, b) => a.name.localeCompare(b.name, "ko"));
+    return HttpResponse.json(list);
+  }),
+
+  // 1-8 의료진 목록 (의료진번호 순)
+  http.get("/api/staff", ({ request }) => {
+    const { deny } = requireRole("의사", "간호사");
+    if (deny) return deny;
+    const q = new URL(request.url).searchParams;
+    const jobType = q.get("jobType");
+    const departmentCode = q.get("departmentCode");
+    if (jobType && !["의사", "간호사", "원무"].includes(jobType)) return validationError({ jobType: "직종은 의사·간호사·원무 중 하나입니다." });
+    const list: Staff[] = db()
+      .staff.filter((s) => (!jobType || s.job_type === jobType) && (!departmentCode || s.department_code === departmentCode))
+      .sort((a, b) => a.staff_id - b.staff_id)
+      .map((s) => ({
+        staffId: s.staff_id,
+        name: s.name,
+        jobType: s.job_type,
+        position: s.position,
+        departmentCode: s.department_code,
+        departmentName: departmentOf(s.department_code)?.name ?? null,
+        phone: s.phone,
+        loginId: s.login_id,
+      }));
     return HttpResponse.json(list);
   }),
 ];
