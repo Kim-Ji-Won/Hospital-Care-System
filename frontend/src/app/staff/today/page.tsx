@@ -3,6 +3,7 @@
 /**
  * S1 오늘 진료 (+ S9 간호사가 보는 오늘 진료, 노쇼 확인 대화상자) — API 2-5, 1-6, 2-7
  * 의사는 본인 일정, 간호사는 진료과 전체를 봅니다. 간호사에게는 진료 시작·노쇼 버튼 대신 담당의 컬럼이 붙습니다.
+ * 날짜를 골라 다른 날 예약도 볼 수 있습니다(2-5의 date). 진료 시작·노쇼 처리는 오늘 예약에만 둡니다.
  */
 import { useState } from "react";
 import Link from "next/link";
@@ -20,16 +21,39 @@ import { Button, Card, Chip, ConfirmDialog, ErrorState, PageHeader, Skeleton, cx
 export default function TodayPage() {
   const { user } = useAuth();
   const isDoctor = user?.role === "의사";
-  const date = today();
+  const todayDate = today();
+  const [date, setDate] = useState(todayDate);
+  const isToday = date === todayDate;
   const daily = useQuery({ queryKey: reservationKeys.daily(date), queryFn: () => reservationApi.daily(date) });
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const moveTo = (next: string) => {
+    setDate(next);
+    setSelectedId(null);
+  };
 
   return (
     <>
       <PageHeader
-        title={`오늘 진료 · ${longDate(date)}`}
+        title={isToday ? `오늘 진료 · ${longDate(date)}` : `${longDate(date)} 진료`}
         sub={isDoctor ? undefined : `${user?.departmentName ?? ""} 전체`}
-        actions={daily.data && <Summary list={daily.data.reservations} />}
+        actions={
+          <div className="flex items-center gap-4">
+            {daily.data && <Summary list={daily.data.reservations} />}
+            <div className="flex items-center gap-2">
+              {/* 날짜를 지우면 빈 값이 오므로 그때는 그대로 둠 */}
+              <input
+                type="date"
+                aria-label="날짜 선택"
+                value={date}
+                onChange={(e) => e.target.value && moveTo(e.target.value)}
+                className="h-10 rounded-lg border border-line/60 bg-white px-3 text-body outline-none focus:border-navy"
+              />
+              <Button variant="secondary" onClick={() => moveTo(todayDate)} disabled={isToday}>
+                오늘
+              </Button>
+            </div>
+          </div>
+        }
       />
       <QueryView
         query={daily}
@@ -44,7 +68,10 @@ export default function TodayPage() {
                   .map((o) => `${o.doctorName ?? ""} ${hm(o.startTime)}~${hm(o.endTime)}${o.reason ? ` (${o.reason})` : ""}`)
                   .join(", "),
               }
-            : { title: "오늘 잡힌 예약이 없습니다", description: "예약은 환자가 웹에서만 만듭니다. 새 예약이 생기면 이 목록에 나타납니다." }
+            : {
+                title: isToday ? "오늘 잡힌 예약이 없습니다" : "이날 잡힌 예약이 없습니다",
+                description: "예약은 환자가 웹에서만 만듭니다. 새 예약이 생기면 이 목록에 나타납니다.",
+              }
         }
       >
         {(d) => {
@@ -53,7 +80,7 @@ export default function TodayPage() {
             <div className="grid grid-cols-[1fr_340px] gap-6">
               <ReservationTable list={d.reservations} showDoctor={!isDoctor} selectedId={selectedId} onSelect={setSelectedId} />
               {selected ? (
-                <PatientPanel reservation={selected} canAct={isDoctor} />
+                <PatientPanel reservation={selected} canAct={isDoctor} isToday={isToday} />
               ) : (
                 <div className="rounded-xl border border-dashed border-sky bg-white p-6 text-center text-body text-ink-sub">
                   목록에서 환자를 고르면 요약이 여기에 보입니다.
@@ -127,7 +154,7 @@ function ReservationTable({
 }
 
 /** 오른쪽 환자 요약과 진료 시작·노쇼 처리 */
-function PatientPanel({ reservation, canAct }: { reservation: StaffReservation; canAct: boolean }) {
+function PatientPanel({ reservation, canAct, isToday }: { reservation: StaffReservation; canAct: boolean; isToday: boolean }) {
   const queryClient = useQueryClient();
   const patient = useQuery({ queryKey: memberKeys.patient(reservation.patient.patientId), queryFn: () => memberApi.patient(reservation.patient.patientId) });
   const [confirming, setConfirming] = useState(false);
@@ -175,8 +202,9 @@ function PatientPanel({ reservation, canAct }: { reservation: StaffReservation; 
       {reservation.status === "완료" && <p className="rounded-lg bg-positive-bg px-3 py-2 text-body text-positive">진료를 마쳤습니다.</p>}
       {reservation.status === "노쇼" && <p className="rounded-lg bg-neutral-bg px-3 py-2 text-body text-ink-sub">노쇼로 처리했습니다.</p>}
 
-      {/* 버튼은 '예약' 상태에서만. 진료 시작은 화면 이동만 하고, 진료 행은 S2 저장 때 생김 */}
-      {canAct && reservation.status === "예약" && (
+      {/* 버튼은 오늘의 '예약' 상태에서만. 진료 시작은 화면 이동만 하고, 진료 행은 S2 저장 때 생김 */}
+      {!isToday && reservation.status === "예약" && <p className="text-caption text-ink-sub">진료 시작과 노쇼 처리는 진료 당일에 합니다.</p>}
+      {isToday && canAct && reservation.status === "예약" && (
         <div className="flex flex-col gap-2">
           <Link
             href={`/staff/encounters/new?reservationId=${reservation.reservationId}`}
@@ -189,7 +217,7 @@ function PatientPanel({ reservation, canAct }: { reservation: StaffReservation; 
           </Button>
         </div>
       )}
-      {!canAct && reservation.status === "예약" && <p className="text-caption text-ink-sub">진료 시작과 노쇼 처리는 담당 의사가 합니다.</p>}
+      {isToday && !canAct && reservation.status === "예약" && <p className="text-caption text-ink-sub">진료 시작과 노쇼 처리는 담당 의사가 합니다.</p>}
 
       <ConfirmDialog
         open={confirming}
