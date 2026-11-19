@@ -19,6 +19,9 @@ import { Button, Card, Chip, ConfirmDialog, EmptyState, ErrorState, PageHeader, 
 
 const NEXT_TAB: Record<ExamStatus, ExamStatus> = { 요청: "시행", 시행: "완료", 완료: "완료" };
 
+/** 오늘이면 시각만, 다른 날이면 날짜까지(올해가 아니면 연도도) */
+const at = (v: string) => (v.startsWith(today()) ? timeOf(v) : `${shortDate(v)} ${timeOf(v)}`);
+
 export default function LabsPage() {
   const { user } = useAuth();
   const exams = useQuery({ queryKey: orderKeys.exams(), queryFn: () => orderApi.exams() });
@@ -106,7 +109,6 @@ function ExamTable({
   onPerform: (id: number) => void;
   performingId?: number;
 }) {
-  const at = (v: string) => (v.startsWith(today()) ? timeOf(v) : `${shortDate(v)} ${timeOf(v)}`);
   return (
     <div className="overflow-hidden rounded-xl border border-sky bg-white self-start">
       <table className="w-full text-left text-body">
@@ -194,7 +196,7 @@ function ResultPanel({ exam, canComplete, readerName, onDone }: { exam: Exam; ca
         <p className="text-caption text-ink-sub">
           {exam.patient.name} · {exam.category}
           {exam.referenceRange && ` · 참고치 ${exam.referenceRange} ${exam.unit ?? ""}`}
-          {exam.performedAt && ` · 시행 ${timeOf(exam.performedAt)}`}
+          {exam.performedAt && ` · 시행 ${at(exam.performedAt)}`}
         </p>
       </div>
 
