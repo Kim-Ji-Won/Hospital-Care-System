@@ -122,17 +122,22 @@ function EncounterView({ encounter: e }: { encounter: EncounterDetail }) {
       </section>
 
       <section>
-        <p className="mb-2 text-caption font-semibold text-ink-sub">검사</p>
+        <div className="mb-2 flex items-center justify-between">
+          <p className="text-caption font-semibold text-ink-sub">검사</p>
+          {/* 결과는 P5 한 화면에 모여 있으므로 링크는 하나만 */}
+          {e.exams.length > 0 && (
+            <Link href="/results" className="text-body font-semibold text-navy hover:underline">
+              결과 보기 ›
+            </Link>
+          )}
+        </div>
         {e.exams.length === 0 ? (
           <p className="text-body text-ink-sub">판독이 끝난 검사 없음</p>
         ) : (
           <ul className="flex flex-col gap-1.5">
             {e.exams.map((x) => (
-              <li key={x.examId} className="flex items-center justify-between text-item">
+              <li key={x.examId} className="text-item">
                 {x.examName}
-                <Link href="/results" className="text-body font-semibold text-navy hover:underline">
-                  결과 보기 ›
-                </Link>
               </li>
             ))}
           </ul>

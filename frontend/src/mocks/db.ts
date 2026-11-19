@@ -197,7 +197,7 @@ export interface MockDb {
   session: { accountType: "환자" | "의료진"; id: number } | null;
 }
 
-const VERSION = 2;
+const VERSION = 3;
 const STORAGE_KEY = "mock:db";
 const ALL_DAYS: DayOfWeek[] = ["월", "화", "수", "목", "금", "토", "일"];
 
@@ -261,6 +261,8 @@ function seed(): MockDb {
       { reservation_id: 1102, patient_id: 10234, schedule_id: sid(12, -14), appointment_at: at(-14, "09:30:00"), status: "완료", created_at: at(-18, "10:00:00"), symptom_note: "속쓰림" },
       { reservation_id: 1060, patient_id: 10234, schedule_id: sid(18, -40), appointment_at: at(-40, "11:00:00"), status: "취소", created_at: at(-45, "09:00:00"), symptom_note: "발목 통증" },
       { reservation_id: 1011, patient_id: 10234, schedule_id: sid(12, -57), appointment_at: at(-57, "11:00:00"), status: "노쇼", created_at: at(-60, "09:00:00"), symptom_note: null },
+      // 작년 예약: 올해가 아닌 날짜에 연도가 붙는지 보여 주는 표본 (-400일이면 언제 시연해도 작년 이전)
+      { reservation_id: 990, patient_id: 10234, schedule_id: sid(15, -400, true), appointment_at: at(-400, "15:00:00"), status: "취소", created_at: at(-405, "19:30:00"), symptom_note: "건강검진 상담" },
       // 정하늘 지난 진료
       { reservation_id: 1088, patient_id: 10388, schedule_id: sid(12, -20), appointment_at: at(-20, "10:00:00"), status: "완료", created_at: at(-25, "09:00:00"), symptom_note: "정기 검진" },
     ],

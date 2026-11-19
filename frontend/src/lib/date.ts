@@ -45,19 +45,24 @@ export const hm = (time: string) => time.slice(0, 5);
 /** "2026-11-11T10:00:00" → "10:00" */
 export const timeOf = (dateTime: string) => dateTime.slice(11, 16);
 
-/** "11. 11(수)" */
+/** 올해가 아닌 날짜에만 연도를 붙임 (작년 기록이 올해 것처럼 읽히지 않게) */
+const otherYear = (d: Date) => d.getFullYear() !== new Date().getFullYear();
+
+/** "11. 11(수)", 올해가 아니면 "2025. 11. 11(화)" */
 export function shortDate(value: string) {
   const d = parse(value);
-  return `${d.getMonth() + 1}. ${pad(d.getDate())}(${DAYS[d.getDay()]})`;
+  const year = otherYear(d) ? `${d.getFullYear()}. ` : "";
+  return `${year}${d.getMonth() + 1}. ${pad(d.getDate())}(${DAYS[d.getDay()]})`;
 }
 
 /** "11. 11(수) 10:00" */
 export const shortDateTime = (value: string) => `${shortDate(value)} ${timeOf(value)}`;
 
-/** "11월 11일(수)" */
+/** "11월 11일(수)", 올해가 아니면 "2025년 11월 11일(화)" */
 export function longDate(value: string) {
   const d = parse(value);
-  return `${d.getMonth() + 1}월 ${d.getDate()}일(${DAYS[d.getDay()]})`;
+  const year = otherYear(d) ? `${d.getFullYear()}년 ` : "";
+  return `${year}${d.getMonth() + 1}월 ${d.getDate()}일(${DAYS[d.getDay()]})`;
 }
 
 /** 만 나이 */
