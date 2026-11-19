@@ -2,6 +2,14 @@
 import { api } from "./client";
 import type { Department, LoginRequest, PatientDetail, PatientProfile, SessionUser, SignupRequest } from "./types";
 
+/** 쿼리 키 묶음. 화면에서는 배열을 직접 적지 않고 이것만 씁니다. (로그인 정보 키는 lib/auth의 ME_KEY) */
+export const memberKeys = {
+  all: ["member"] as const,
+  profile: () => [...memberKeys.all, "profile"] as const,
+  patient: (patientId: number) => [...memberKeys.all, "patient", patientId] as const,
+  departments: () => [...memberKeys.all, "departments"] as const,
+};
+
 export const memberApi = {
   /** 1-1 로그인 */
   login: (body: LoginRequest) => api.post<SessionUser>("/api/auth/login", body),

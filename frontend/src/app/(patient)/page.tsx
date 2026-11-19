@@ -1,12 +1,13 @@
 "use client";
 
 /**
- * P1 홈. 지금은 "내 정보" 카드만 실제 데이터(1-5)로 그립니다.
+ * P1 홈 — API 1-5 (예정: 2-4, 6-3, 4-4)
+ * 지금은 "내 정보" 카드만 실제 데이터(1-5)로 그립니다.
  * 다음 예약(2-4), 미결제(6-3), 새 검사 결과(4-4)는 해당 API를 붙일 때 채웁니다.
  */
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { memberApi } from "@/lib/api/member";
+import { memberApi, memberKeys } from "@/lib/api/member";
 import { useAuth } from "@/lib/auth";
 import { QueryView } from "@/components/query-view";
 import { Card } from "@/components/ui";
@@ -18,7 +19,7 @@ function maskPhone(phone: string) {
 
 export default function HomePage() {
   const { user } = useAuth();
-  const profile = useQuery({ queryKey: ["me", "profile"], queryFn: memberApi.myProfile });
+  const profile = useQuery({ queryKey: memberKeys.profile(), queryFn: memberApi.myProfile });
 
   return (
     <div className="flex flex-col gap-6">
