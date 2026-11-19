@@ -11,7 +11,7 @@ import { ApiError } from "@/lib/api/client";
 import { memberApi, memberKeys } from "@/lib/api/member";
 import { paymentApi, paymentKeys } from "@/lib/api/payment";
 import type { Payment, PaymentMethod, PaymentStatus } from "@/lib/api/types";
-import { shortDateTime, won } from "@/lib/date";
+import { shortDate, shortDateTime, won } from "@/lib/date";
 import { includesText, paymentTitle } from "@/components/payment-text";
 import { patientLine } from "@/components/patient-label";
 import { Button, Card, Chip, EmptyState, ErrorState, PageHeader, Skeleton, Tabs, cx } from "@/components/ui";
@@ -82,6 +82,12 @@ function PatientBilling({ patientId }: { patientId: number }) {
         <p className="text-title font-bold text-ink">{p.name}</p>
         <p className="text-body text-ink-sub">{patientLine(p)}</p>
         <p className="text-body text-ink-sub">{p.phone.replace(/-(\d+)-/, "-****-")}</p>
+        {p.currentAdmission && (
+          <p className="flex items-center gap-2 text-body text-ink">
+            <Chip>입원 중</Chip>
+            {p.currentAdmission.roomNo}호 · {shortDate(p.currentAdmission.admittedAt)} 입원. 입원 진료비는 퇴원 처리 때 한 번에 청구됩니다.
+          </p>
+        )}
       </Card>
       <Tabs
         value={tab}

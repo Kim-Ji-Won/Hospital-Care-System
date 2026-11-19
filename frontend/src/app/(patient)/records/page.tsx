@@ -68,8 +68,10 @@ function EncounterView({ encounter: e }: { encounter: EncounterDetail }) {
   return (
     <Card className="flex flex-col gap-5 self-start">
       <div>
-        <p className="text-title font-bold text-ink">
+        <p className="flex items-center gap-2 text-title font-bold text-ink">
           {shortDate(e.encounterAt)} {typeLabel(e)}
+          {/* 입원을 결정한 진료는 결제가 따로 없고 퇴원 때 입원 진료비에 합쳐 청구됨 */}
+          {e.admissionDecided && <Chip>입원 결정</Chip>}
         </p>
         <p className="text-caption text-ink-sub">담당의 {e.doctorName}</p>
       </div>

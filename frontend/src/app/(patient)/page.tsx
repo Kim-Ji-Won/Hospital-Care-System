@@ -12,8 +12,8 @@ import { orderApi, orderKeys } from "@/lib/api/order";
 import { paymentApi, paymentKeys } from "@/lib/api/payment";
 import { reservationApi, reservationKeys } from "@/lib/api/reservation";
 import { useAuth } from "@/lib/auth";
-import { longDate, now, shortDate, timeOf, won, patientNo } from "@/lib/date";
-import { AdmissionCard } from "@/components/inpatient";
+import { longDate, shortDate, timeOf, today, won, patientNo } from "@/lib/date";
+import { AdmissionCard, inpatientBillingLine, useInpatientState } from "@/components/inpatient";
 import { QueryView } from "@/components/query-view";
 import { Card, Chip } from "@/components/ui";
 
@@ -28,6 +28,8 @@ export default function HomePage() {
   const reservations = useQuery({ queryKey: reservationKeys.mine(), queryFn: reservationApi.mine });
   const payments = useQuery({ queryKey: paymentKeys.mine(), queryFn: paymentApi.mine });
   const exams = useQuery({ queryKey: orderKeys.mine(), queryFn: orderApi.mine });
+  const inpatient = useInpatientState();
+  const billingLine = inpatientBillingLine(inpatient);
 
   return (
     <div className="flex flex-col gap-6">
@@ -38,7 +40,7 @@ export default function HomePage() {
         </Link>
       </div>
 
-      <AdmissionCard />
+      <AdmissionCard state={inpatient} />
 
       <div className="grid grid-cols-[3fr_2fr] gap-6">
         {/* 다음 예약 */}
@@ -47,7 +49,7 @@ export default function HomePage() {
           <QueryView query={reservations} skeletonRows={2} errorTitle="예약을 불러오지 못했습니다">
             {(list) => {
               const next = list
-                .filter((r) => r.status === "예약" && r.appointmentAt >= now())
+                .filter((r) => r.status === "예약" && r.appointmentAt.slice(0, 10) >= today())
                 .sort((a, b) => a.appointmentAt.localeCompare(b.appointmentAt))[0];
               if (!next) {
                 return (
@@ -83,7 +85,7 @@ export default function HomePage() {
           <QueryView query={payments} skeletonRows={2} errorTitle="진료비를 불러오지 못했습니다">
             {(list) => {
               const unpaid = list.filter((p) => p.status === "미결제");
-              if (unpaid.length === 0) return <p className="text-body text-ink-sub">낼 진료비가 없습니다.</p>;
+              if (unpaid.length === 0) return <p className="text-body text-ink-sub">{billingLine ?? "낼 진료비가 없습니다."}</p>;
               const total = unpaid.reduce((sum, p) => sum + p.amount, 0);
               return (
                 <div className="flex flex-col gap-2">
@@ -98,7 +100,7 @@ export default function HomePage() {
                       </li>
                     ))}
                   </ul>
-                  <p className="text-caption text-ink-sub">1층 원무과 창구에서 수납합니다.</p>
+                  <p className="text-caption text-ink-sub">1층 원무과 창구에서 수납합니다.{billingLine && ` ${billingLine}`}</p>
                 </div>
               );
             }}

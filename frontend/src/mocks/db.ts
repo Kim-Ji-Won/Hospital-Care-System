@@ -17,7 +17,7 @@ import type {
   ReservationStatus,
   ResultFlag,
 } from "@/lib/api/types";
-import { addDays, today } from "@/lib/date";
+import { addDays, now, today } from "@/lib/date";
 
 export interface PatientRow {
   patient_id: number;
@@ -197,13 +197,16 @@ export interface MockDb {
   session: { accountType: "환자" | "의료진"; id: number } | null;
 }
 
-const VERSION = 4;
+const VERSION = 5;
 const STORAGE_KEY = "mock:db";
 const ALL_DAYS: DayOfWeek[] = ["월", "화", "수", "목", "금", "토", "일"];
 
 function seed(): MockDb {
   const t = today();
   const at = (dayOffset: number, time: string) => `${addDays(t, dayOffset)}T${time}`;
+  // 오늘 이미 끝난 일(09:00 진료 완료, 09:30 노쇼, 검사 시행)은 지금보다 앞이어야 함.
+  // 오전 9시 45분 전에 시연을 열면 미래 기록이 되므로 그때는 어제로 둡니다.
+  const done = now() >= at(0, "09:45:00") ? 0 : -1;
 
   // 시연이 요일과 상관없이 되도록 목 서버 일정은 매일 있습니다(실제 일정은 백엔드 시드가 정함).
   let scheduleId = 10;
@@ -250,9 +253,9 @@ function seed(): MockDb {
     schedules,
     dayOffs: [],
     reservations: [
-      // 오늘 박지훈 오전: 완료·노쇼·대기 3 (S1 시안과 같은 구성)
-      { reservation_id: 1195, patient_id: 10388, schedule_id: sid(12, 0), appointment_at: at(0, "09:00:00"), status: "완료", created_at: at(-3, "18:20:00"), symptom_note: null },
-      { reservation_id: 1196, patient_id: 10521, schedule_id: sid(12, 0), appointment_at: at(0, "09:30:00"), status: "노쇼", created_at: at(-2, "11:02:00"), symptom_note: "두통, 어지러움" },
+      // 오늘 박지훈 오전: 완료·노쇼·대기 3 (S1 시안과 같은 구성. 완료·노쇼는 9시 45분 전이면 어제)
+      { reservation_id: 1195, patient_id: 10388, schedule_id: sid(12, done), appointment_at: at(done, "09:00:00"), status: "완료", created_at: at(-3, "18:20:00"), symptom_note: null },
+      { reservation_id: 1196, patient_id: 10521, schedule_id: sid(12, done), appointment_at: at(done, "09:30:00"), status: "노쇼", created_at: at(-2, "11:02:00"), symptom_note: "두통, 어지러움" },
       { reservation_id: 1201, patient_id: 10234, schedule_id: sid(12, 0), appointment_at: at(0, "10:00:00"), status: "예약", created_at: at(-2, "21:14:05"), symptom_note: "식후 속쓰림이 일주일째" },
       { reservation_id: 1202, patient_id: 10633, schedule_id: sid(12, 0), appointment_at: at(0, "10:30:00"), status: "예약", created_at: at(-1, "08:40:00"), symptom_note: "기침 3일" },
       { reservation_id: 1203, patient_id: 10412, schedule_id: sid(12, 0), appointment_at: at(0, "11:00:00"), status: "예약", created_at: at(-1, "13:10:00"), symptom_note: "혈압약 재처방" },
@@ -268,7 +271,7 @@ function seed(): MockDb {
     ],
     encounters: [
       { encounter_id: 5521, patient_id: 10234, doctor_id: 12, reservation_id: 1102, admission_id: null, encounter_at: at(-14, "09:35:00"), encounter_type: "외래", symptom: "속쓰림", finding: "위 점막 자극 소견. 2주 복약 후 경과 관찰." },
-      { encounter_id: 5528, patient_id: 10388, doctor_id: 12, reservation_id: 1195, admission_id: null, encounter_at: at(0, "09:12:00"), encounter_type: "외래", symptom: null, finding: "흉부 불편감. 검사 후 재평가." },
+      { encounter_id: 5528, patient_id: 10388, doctor_id: 12, reservation_id: 1195, admission_id: null, encounter_at: at(done, "09:12:00"), encounter_type: "외래", symptom: null, finding: "흉부 불편감. 검사 후 재평가." },
       { encounter_id: 5490, patient_id: 10388, doctor_id: 12, reservation_id: 1088, admission_id: null, encounter_at: at(-20, "10:05:00"), encounter_type: "외래", symptom: "정기 검진", finding: "특이 소견 없음" },
     ],
     diagnoses: [
@@ -286,16 +289,16 @@ function seed(): MockDb {
       { exam_id: 3290, encounter_id: 5521, exam_code: "L101", reader_id: 12, requested_at: at(-14, "09:35:00"), performed_at: at(-13, "14:20:00"), status: "완료", result_value: 11.8, result_flag: "이상", reading_note: "경미한 백혈구 증가. 염증 반응 의심, 2주 뒤 재검 권장." },
       { exam_id: 3291, encounter_id: 5521, exam_code: "L103", reader_id: 12, requested_at: at(-14, "09:35:00"), performed_at: at(-13, "14:25:00"), status: "완료", result_value: 0.3, result_flag: "정상", reading_note: "정상 범위." },
       { exam_id: 3295, encounter_id: 5521, exam_code: "R202", reader_id: 15, requested_at: at(-14, "09:35:00"), performed_at: at(-12, "11:00:00"), status: "완료", result_value: null, result_flag: "정상", reading_note: "특이 소견 없음." },
-      { exam_id: 3301, encounter_id: 5528, exam_code: "L101", reader_id: null, requested_at: at(0, "09:12:00"), performed_at: null, status: "요청", result_value: null, result_flag: null, reading_note: null },
-      { exam_id: 3302, encounter_id: 5528, exam_code: "F301", reader_id: null, requested_at: at(0, "09:12:00"), performed_at: at(0, "09:40:00"), status: "시행", result_value: null, result_flag: null, reading_note: null },
+      { exam_id: 3301, encounter_id: 5528, exam_code: "L101", reader_id: null, requested_at: at(done, "09:12:00"), performed_at: null, status: "요청", result_value: null, result_flag: null, reading_note: null },
+      { exam_id: 3302, encounter_id: 5528, exam_code: "F301", reader_id: null, requested_at: at(done, "09:12:00"), performed_at: at(done, "09:40:00"), status: "시행", result_value: null, result_flag: null, reading_note: null },
       { exam_id: 3280, encounter_id: 5490, exam_code: "L102", reader_id: 12, requested_at: at(-20, "10:05:00"), performed_at: at(-20, "10:40:00"), status: "완료", result_value: 92, result_flag: "정상", reading_note: "정상 범위." },
     ],
     admissions: [],
     payments: [
       // 김서연 2주 전 외래: 진찰 15,000 + 일반혈액 8,000 + CRP 15,500 + 복부 CT 60,000 (원외 처방은 제외)
       { payment_id: 9077, encounter_id: 5521, amount: 98500, created_at: at(-14, "10:42:00"), method: null, status: "미결제", paid_at: null },
-      // 정하늘 오늘 외래: 진찰 15,000 + 일반혈액 8,000 + 심전도 12,000
-      { payment_id: 9101, encounter_id: 5528, amount: 35000, created_at: at(0, "09:20:00"), method: null, status: "미결제", paid_at: null },
+      // 정하늘 오늘(이른 시각이면 어제) 외래: 진찰 15,000 + 일반혈액 8,000 + 심전도 12,000
+      { payment_id: 9101, encounter_id: 5528, amount: 35000, created_at: at(done, "09:20:00"), method: null, status: "미결제", paid_at: null },
       // 정하늘 지난 외래: 진찰 15,000 + 공복 혈당 5,000
       { payment_id: 9050, encounter_id: 5490, amount: 20000, created_at: at(-20, "10:30:00"), method: "카드", status: "완료", paid_at: at(-20, "10:51:00") },
     ],
@@ -431,7 +434,7 @@ function addInpatientSamples(d: MockDb, at: (dayOffset: number, time: string) =>
   });
 
   // 김서현: 어제 외래에서 입원 결정, 병실 배정 대기
-  decision(9412, 12, -1, "09:40:00", "J18.9", "고열과 기침, 흉부 청진상 수포음. 폐렴 의심, 입원 치료 필요.", "고열, 기침 5일");
+  decision(9412, 12, -1, "10:40:00", "J18.9", "고열과 기침, 흉부 청진상 수포음. 폐렴 의심, 입원 치료 필요.", "고열, 기침 5일");
 
   // 김서연: 작년 지난 입원 (4일, 501호) → 퇴원 청구 완료
   const ksy = decision(10234, 12, -420, "10:10:00", "A09", "구토·설사로 탈수. 수액 치료 위해 입원.", "구토, 설사");

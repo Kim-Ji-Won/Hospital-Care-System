@@ -33,7 +33,7 @@ export default function AdmissionPage() {
               {current && (
                 <div className="flex flex-col gap-3 self-start">
                   <CurrentCard admission={current} />
-                  <InpatientNotice />
+                  <InpatientNotice kind="admitted" />
                 </div>
               )}
               <div className="flex flex-col gap-6">
