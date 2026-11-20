@@ -1,9 +1,9 @@
 "use client";
 
 /**
- * S6 수납 — API 1-6, 6-1, 6-2
+ * S6 수납 + S6b 결제 취소 — API 1-6, 6-1, 6-2, 6-4
  * 원무 직원이 환자번호로 환자를 찾고, 자동으로 만들어진 '미결제' 결제를 수단을 골라 '완료'로 바꿉니다.
- * 금액은 만들거나 고치지 않고, 저장된 합계와 포함 목록만 보여 줍니다. 결제 취소(S6b, 6-4)는 3순위입니다.
+ * 금액은 만들거나 고치지 않고, 저장된 합계와 포함 목록만 보여 줍니다. 완료 탭에서 결제를 취소하면(S6b, 6-4) 취소 건은 남고 같은 진료에 새 미결제가 생깁니다.
  */
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -14,7 +14,7 @@ import type { Payment, PaymentMethod, PaymentStatus } from "@/lib/api/types";
 import { shortDate, shortDateTime, won } from "@/lib/date";
 import { includesText, paymentTitle } from "@/components/payment-text";
 import { patientLine } from "@/components/patient-label";
-import { Button, Card, Chip, EmptyState, ErrorState, PageHeader, Skeleton, Tabs, cx } from "@/components/ui";
+import { Button, Card, Chip, ConfirmDialog, EmptyState, ErrorState, PageHeader, Skeleton, Tabs, cx } from "@/components/ui";
 
 const METHODS: PaymentMethod[] = ["카드", "현금", "계좌이체"];
 
@@ -110,7 +110,18 @@ function PatientBilling({ patientId }: { patientId: number }) {
         <div className="grid grid-cols-[1fr_360px] gap-6">
           <PaymentTable list={list} selectedId={selectedId} onSelect={setSelectedId} />
           {selected ? (
-            <PaymentPanel key={selected.paymentId} payment={selected} patientId={patientId} onDone={() => setSelectedId(null)} />
+            <PaymentPanel
+              key={selected.paymentId}
+              payment={selected}
+              patientId={patientId}
+              patientName={p.name}
+              onDone={() => setSelectedId(null)}
+              onCancelled={(newId) => {
+                // 새로 생긴 미결제 건으로 안내
+                setTab("미결제");
+                setSelectedId(newId);
+              }}
+            />
           ) : (
             <div className="rounded-xl border border-dashed border-sky bg-white p-6 text-center text-body text-ink-sub">결제를 고르면 포함 내역과 수납이 여기에 보입니다.</div>
           )}
@@ -153,9 +164,34 @@ function PaymentTable({ list, selectedId, onSelect }: { list: Payment[]; selecte
   );
 }
 
-function PaymentPanel({ payment, patientId, onDone }: { payment: Payment; patientId: number; onDone: () => void }) {
+function PaymentPanel({
+  payment,
+  patientId,
+  patientName,
+  onDone,
+  onCancelled,
+}: {
+  payment: Payment;
+  patientId: number;
+  patientName: string;
+  onDone: () => void;
+  onCancelled: (newPaymentId: number) => void;
+}) {
   const queryClient = useQueryClient();
   const [method, setMethod] = useState<PaymentMethod | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const cancel = useMutation({
+    mutationFn: () => paymentApi.cancel(payment.paymentId),
+    onSuccess: (result) => {
+      setConfirming(false);
+      queryClient.invalidateQueries({ queryKey: paymentKeys.all });
+      onCancelled(result.newPayment.paymentId);
+    },
+    onError: (e) => {
+      // 이미 취소된 결제면 목록을 새로 받아 새 미결제 건을 보게 함
+      if (e instanceof ApiError && e.code === "INVALID_STATUS") queryClient.invalidateQueries({ queryKey: paymentKeys.all });
+    },
+  });
   const pay = useMutation({
     mutationFn: () => paymentApi.pay(payment.paymentId, method!),
     onSuccess: () => {
@@ -205,11 +241,45 @@ function PaymentPanel({ payment, patientId, onDone }: { payment: Payment; patien
           </Button>
         </>
       ) : (
-        <p className="text-body text-ink-sub">
-          {payment.method} · {payment.paidAt ? shortDateTime(payment.paidAt) : ""}
-          {payment.status === "취소" && " · 다시 청구되어 취소됨"}
-        </p>
+        <>
+          <p className="text-body text-ink-sub">
+            {payment.method} · {payment.paidAt ? shortDateTime(payment.paidAt) : ""}
+            {payment.status === "취소" && " · 다시 청구되어 취소됨"}
+          </p>
+          {payment.status === "완료" && (
+            <Button
+              variant="secondary"
+              onClick={() => {
+                cancel.reset();
+                setConfirming(true);
+              }}
+            >
+              결제 취소
+            </Button>
+          )}
+        </>
       )}
+
+      <ConfirmDialog
+        open={confirming}
+        title="이 결제를 취소할까요?"
+        confirmLabel="결제 취소"
+        pending={cancel.isPending}
+        onConfirm={() => cancel.mutate()}
+        onCancel={() => setConfirming(false)}
+      >
+        <p>
+          {patientName} · {paymentTitle(payment)} · {won(payment.amount)} ({payment.method})
+        </p>
+        <p>취소한 결제는 기록으로 남고, 같은 진료에 지금 단가로 계산한 새 미결제 결제가 만들어집니다.</p>
+        {cancel.isError && (
+          <p className="mt-2 text-error-ink">
+            {cancel.error instanceof ApiError && cancel.error.code === "INVALID_STATUS"
+              ? "이미 취소된 결제입니다. 미결제 탭에서 새로 생긴 결제를 확인하세요."
+              : "취소하지 못했습니다. 잠시 뒤 다시 시도하세요."}
+          </p>
+        )}
+      </ConfirmDialog>
     </Card>
   );
 }

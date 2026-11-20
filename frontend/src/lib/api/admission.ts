@@ -1,6 +1,6 @@
 /** 05 입·퇴원 관리 (김지원) — docs/api/05-admission.md */
 import { api } from "./client";
-import type { Admission, AdmissionDetail, CreateAdmissionRequest, DateTime, DischargeResponse, MyAdmission, PendingAdmission, Room } from "./types";
+import type { Admission, AdmissionDetail, CreateAdmissionRequest, DateTime, DischargeResponse, MyAdmission, PendingAdmission, Room, RoomInput } from "./types";
 
 export const admissionKeys = {
   all: ["admission"] as const,
@@ -26,4 +26,8 @@ export const admissionApi = {
   discharge: (admissionId: number, dischargedAt: DateTime) => api.post<DischargeResponse>(`/api/admissions/${admissionId}/discharge`, { dischargedAt }),
   /** 5-7 내 입원 내역 */
   mine: () => api.get<MyAdmission[]>("/api/me/admissions"),
+  /** 5-8 병실 추가·수정·삭제 */
+  createRoom: (body: RoomInput) => api.post<Room>("/api/rooms", body),
+  updateRoom: (roomNo: number, body: Partial<RoomInput>) => api.patch<Room>(`/api/rooms/${roomNo}`, body),
+  deleteRoom: (roomNo: number) => api.delete(`/api/rooms/${roomNo}`),
 };

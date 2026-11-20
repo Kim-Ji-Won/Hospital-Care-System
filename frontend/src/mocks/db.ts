@@ -197,7 +197,7 @@ export interface MockDb {
   session: { accountType: "환자" | "의료진"; id: number } | null;
 }
 
-const VERSION = 5;
+const VERSION = 6;
 const STORAGE_KEY = "mock:db";
 const ALL_DAYS: DayOfWeek[] = ["월", "화", "수", "목", "금", "토", "일"];
 
@@ -251,7 +251,12 @@ function seed(): MockDb {
       { patient_id: 10633, name: "한지우", birth_date: "1999-02-14", gender: "남", phone: "010-5550-0163", address: null, blood_type: null, login_id: "jiwoo99", password: "demo1234" },
     ],
     schedules,
-    dayOffs: [],
+    // 휴진 표본 (S7): 박지훈 5일 뒤 오전 학회, 9일 뒤 종일 개인 사정
+    dayOffs: [
+      { day_off_id: 81, schedule_id: sid(12, 5), off_date: addDays(t, 5), reason: "학회" },
+      { day_off_id: 82, schedule_id: sid(12, 9), off_date: addDays(t, 9), reason: "개인 사정" },
+      { day_off_id: 83, schedule_id: sid(12, 9, true), off_date: addDays(t, 9), reason: "개인 사정" },
+    ],
     reservations: [
       // 오늘 박지훈 오전: 완료·노쇼·대기 3 (S1 시안과 같은 구성. 완료·노쇼는 9시 45분 전이면 어제)
       { reservation_id: 1195, patient_id: 10388, schedule_id: sid(12, done), appointment_at: at(done, "09:00:00"), status: "완료", created_at: at(-3, "18:20:00"), symptom_note: null },
