@@ -139,7 +139,7 @@ function AdmissionTable({ list, isDoctor }: { list: Admission[]; isDoctor: boole
             <th className="px-2 py-3 font-semibold">입원</th>
             <th className="px-2 py-3 font-semibold">퇴원 예정</th>
             <th className="px-2 py-3 font-semibold">일수</th>
-            <th className="px-2 py-3" />
+            <th className="px-2 py-3"><span className="sr-only">작업</span></th>
           </tr>
         </thead>
         <tbody>

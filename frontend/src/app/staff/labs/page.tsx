@@ -15,7 +15,7 @@ import { useAuth } from "@/lib/auth";
 import { shortDate, timeOf, today } from "@/lib/date";
 import { QueryView } from "@/components/query-view";
 import { PatientName } from "@/components/patient-label";
-import { Button, Card, Chip, ConfirmDialog, EmptyState, ErrorState, PageHeader, Tabs, cx } from "@/components/ui";
+import { Button, Card, Chip, ConfirmDialog, EmptyState, ErrorState, PageHeader, Tabs, cx, selectableRow } from "@/components/ui";
 
 const NEXT_TAB: Record<ExamStatus, ExamStatus> = { 요청: "시행", 시행: "완료", 완료: "완료" };
 
@@ -118,15 +118,15 @@ function ExamTable({
             <th className="px-4 py-3 font-semibold">검사</th>
             <th className="px-4 py-3 font-semibold">분류</th>
             <th className="px-4 py-3 font-semibold">{tab === "요청" ? "요청" : tab === "시행" ? "시행" : "판독"}</th>
-            <th className="px-4 py-3 font-semibold">{tab === "완료" ? "판정" : ""}</th>
+            <th className="px-4 py-3 font-semibold">{tab === "완료" ? "판정" : <span className="sr-only">작업</span>}</th>
           </tr>
         </thead>
         <tbody>
           {list.map((x) => (
             <tr
               key={x.examId}
-              onClick={tab === "시행" ? () => onSelect(x.examId) : undefined}
-              className={cx("border-b border-skeleton last:border-0", tab === "시행" && "cursor-pointer hover:bg-page", x.examId === selectedId && "bg-select-bg hover:bg-select-bg")}
+              // 결과 입력(S4a)은 시행 탭에서만 고름
+              {...(tab === "시행" ? selectableRow(x.examId === selectedId, () => onSelect(x.examId), "last:border-0") : { className: "border-b border-skeleton last:border-0" })}
             >
               <td className="px-4 py-3">
                 <PatientName patient={x.patient} compact />

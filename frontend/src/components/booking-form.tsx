@@ -18,10 +18,20 @@ import { Button, EmptyState, ErrorState, PageHeader, Skeleton, cx } from "@/comp
 
 const WEEKDAYS = ["월", "화", "수", "목", "금", "토", "일"];
 
-/** 이번 주 월요일 */
-function mondayOf(date: string) {
-  const offset = (parse(date).getDay() + 6) % 7;
-  return addDays(date, -offset);
+/** "2026-11" → 앞뒤 달 */
+function addMonths(month: string, n: number) {
+  const [y, m] = month.split("-").map(Number);
+  const d = new Date(y, m - 1 + n, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+/** 한 달 달력: 월요일 시작이라 1일 앞을 빈칸(null)으로 채움 */
+function monthCells(month: string): (string | null)[] {
+  const first = `${month}-01`;
+  const lead = (parse(first).getDay() + 6) % 7;
+  const [y, m] = month.split("-").map(Number);
+  const count = new Date(y, m, 0).getDate();
+  return [...Array<null>(lead).fill(null), ...Array.from({ length: count }, (_, i) => addDays(first, i))];
 }
 
 /**
@@ -34,7 +44,8 @@ export function BookingForm({ change }: { change?: MyReservation }) {
   const departments = useQuery({ queryKey: memberKeys.departments(), queryFn: memberApi.departments });
 
   const [departmentCode, setDepartmentCode] = useState<string | null>(change?.departmentCode ?? null);
-  const [weekStart, setWeekStart] = useState(() => mondayOf(today()));
+  const thisMonth = today().slice(0, 7);
+  const [month, setMonth] = useState(thisMonth);
   const [date, setDate] = useState<string | null>(null);
   const [time, setTime] = useState<string | null>(null);
   const [note, setNote] = useState("");
@@ -43,9 +54,9 @@ export function BookingForm({ change }: { change?: MyReservation }) {
   const deptCode = departmentCode ?? departments.data?.[0]?.departmentCode ?? null;
   const dept = departments.data?.find((d) => d.departmentCode === deptCode);
 
-  // 보이는 2주가 두 달에 걸칠 수 있어 달마다 2-1을 부름
-  const days = useMemo(() => Array.from({ length: 14 }, (_, i) => addDays(weekStart, i)), [weekStart]);
-  const months = [...new Set(days.map((d) => d.slice(0, 7)))];
+  // 보이는 달을 2-1로 부름. 다른 달로 넘겨도 고른 날짜가 풀리지 않게 그 날짜의 달도 함께 부름
+  const days = useMemo(() => monthCells(month), [month]);
+  const months = [...new Set([month, ...(date ? [date.slice(0, 7)] : [])])];
   const dateQueries = useQueries({
     queries: months.map((month) => ({
       queryKey: reservationKeys.dates(deptCode ?? "", month),
@@ -125,14 +136,14 @@ export function BookingForm({ change }: { change?: MyReservation }) {
               <div>
                 <div className="mb-3 flex items-center justify-between">
                   <p className="text-body font-bold text-ink-sub">
-                    날짜 · {parse(weekStart).getFullYear()}년 {parse(weekStart).getMonth() + 1}월
+                    날짜 · {Number(month.slice(0, 4))}년 {Number(month.slice(5))}월
                   </p>
                   <div className="flex gap-1">
-                    <Button variant="ghost" className="h-8 px-2" disabled={weekStart <= mondayOf(today())} onClick={() => setWeekStart(addDays(weekStart, -14))}>
-                      ‹ 이전
+                    <Button variant="ghost" className="h-8 px-2" disabled={month <= thisMonth} onClick={() => setMonth(addMonths(month, -1))}>
+                      ‹ 이전 달
                     </Button>
-                    <Button variant="ghost" className="h-8 px-2" onClick={() => setWeekStart(addDays(weekStart, 14))}>
-                      다음 ›
+                    <Button variant="ghost" className="h-8 px-2" onClick={() => setMonth(addMonths(month, 1))}>
+                      다음 달 ›
                     </Button>
                   </div>
                 </div>
@@ -142,7 +153,8 @@ export function BookingForm({ change }: { change?: MyReservation }) {
                       {w}
                     </span>
                   ))}
-                  {days.map((d) => {
+                  {days.map((d, i) => {
+                    if (!d) return <span key={`blank-${i}`} aria-hidden />;
                     const open = availableDates.has(d);
                     const selected = d === selectedDate;
                     return (
@@ -191,7 +203,10 @@ export function BookingForm({ change }: { change?: MyReservation }) {
                   <EmptyState
                     title={change ? `${parse(selectedDate).getDate()}일(${dayOfWeek(selectedDate)})은 남은 시간이 없어요` : "이 날은 예약할 수 있는 시간이 없습니다"}
                     description={change ? "지금 예약은 그대로 있습니다. 다른 날짜를 골라 보세요." : undefined}
-                    action={nextAvailable && <Button variant="secondary" onClick={() => setDate(nextAvailable)}>다음 가능한 날({shortDate(nextAvailable)})로 이동</Button>}
+                    action={nextAvailable && <Button variant="secondary" onClick={() => {
+                          setDate(nextAvailable);
+                          setMonth(nextAvailable.slice(0, 7));
+                        }}>다음 가능한 날({shortDate(nextAvailable)})로 이동</Button>}
                   />
                 ) : (
                   <div className="grid grid-cols-4 gap-2">

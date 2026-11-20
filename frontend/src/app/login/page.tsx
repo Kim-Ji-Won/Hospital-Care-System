@@ -27,7 +27,7 @@ export default function LoginPage() {
   return (
     <main className="mx-auto grid min-h-screen max-w-[1200px] grid-cols-[1fr_440px] items-center gap-16 px-6 py-12">
       <section>
-        <p className="text-step font-bold text-navy">병원 예약·진료</p>
+        <h1 className="text-step font-bold text-navy">병원 예약·진료</h1>
         <p className="mt-3 text-item text-ink-sub">예약, 진료 기록, 검사 결과, 결제 내역을 한곳에서 확인합니다.</p>
         <div className="mt-8 rounded-xl border border-sky bg-white p-5">
           <p className="text-item font-semibold text-ink">처음 이용하시나요?</p>
