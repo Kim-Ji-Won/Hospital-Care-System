@@ -172,6 +172,7 @@ export function ConfirmDialog({
   confirmLabel,
   cancelLabel = "닫기",
   pending,
+  confirmDisabled,
   onConfirm,
   onCancel,
 }: {
@@ -181,6 +182,8 @@ export function ConfirmDialog({
   confirmLabel: string;
   cancelLabel?: string;
   pending?: boolean;
+  /** 서버가 이미 막은 뒤처럼, 다시 눌러도 소용없을 때 */
+  confirmDisabled?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
 }) {
@@ -216,7 +219,7 @@ export function ConfirmDialog({
             <Button variant="secondary" onClick={onCancel} disabled={pending} autoFocus>
               {cancelLabel}
             </Button>
-            <Button onClick={onConfirm} disabled={pending}>
+            <Button onClick={onConfirm} disabled={pending || confirmDisabled}>
               {pending ? "처리하는 중…" : confirmLabel}
             </Button>
           </div>

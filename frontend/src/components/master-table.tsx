@@ -7,6 +7,7 @@
 import { useState, type ReactNode } from "react";
 import { keepPreviousData, useMutation, useQuery, useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { ApiError } from "@/lib/api/client";
+import { josa } from "@/lib/josa";
 import { Button, Card, ConfirmDialog, EmptyState, ErrorState, Skeleton, TextField, cx, selectableRow } from "@/components/ui";
 
 export type FormValues = Record<string, string>;
@@ -63,7 +64,7 @@ function errorText(e: unknown, noun: string): string {
   const d = (e.details ?? {}) as Record<string, unknown>;
   switch (e.code) {
     case "CODE_TAKEN":
-      return `같은 코드의 ${noun}이(가) 이미 있습니다.`;
+      return `같은 코드의 ${josa(noun, "이/가")} 이미 있습니다.`;
     case "IN_USE":
       return `${d.count}건에서 쓰고 있어 지울 수 없습니다. 기록은 지우지 않고 보관합니다.`;
     case "LOGIN_ID_TAKEN":
@@ -99,7 +100,7 @@ export function MasterTable<T>({ config, addRequested, onAddHandled }: { config:
         ) : list.isError ? (
           <ErrorState title={`${config.noun} 목록을 불러오지 못했습니다`} cause="잠시 뒤 다시 시도하세요." />
         ) : list.data.length === 0 ? (
-          <EmptyState title={q ? `'${q}'(으)로 찾은 ${config.noun}이(가) 없습니다` : `등록된 ${config.noun}이(가) 없습니다`} description={config.emptyText} />
+          <EmptyState title={q ? `${josa(`'${q}'`, "으로/로")} 찾은 ${josa(config.noun, "이/가")} 없습니다` : `등록된 ${josa(config.noun, "이/가")} 없습니다`} description={config.emptyText} />
         ) : (
           <table className="w-full table-fixed text-left text-body break-keep">
             <thead className="border-b border-sky text-caption text-ink-sub">
@@ -172,9 +173,10 @@ function EditPanel<T>({ config, row, onDone, onClose }: { config: MasterConfig<T
       const changes = Object.fromEntries(visible.filter((f) => !f.lockedOnEdit && form[f.key] !== initial[f.key]).map((f) => [f.key, toValue(f, form[f.key] ?? "")]));
       return config.update(row, changes);
     },
-    onSuccess: () => {
+    // 추가한 뒤에는 새 행을 골라 두어 저장된 것을 바로 보여 줌
+    onSuccess: (saved) => {
       queryClient.invalidateQueries({ queryKey: config.invalidate });
-      onDone(row ? config.idOf(row) : null);
+      onDone(row ? config.idOf(row) : saved ? config.idOf(saved as T) : null);
     },
   });
   const remove = useMutation({
@@ -251,9 +253,10 @@ function EditPanel<T>({ config, row, onDone, onClose }: { config: MasterConfig<T
       ))}
       <ConfirmDialog
         open={confirming}
-        title={`이 ${config.noun}을(를) 지울까요?`}
+        title={`이 ${josa(config.noun, "을/를")} 지울까요?`}
         confirmLabel="삭제"
         pending={remove.isPending}
+        confirmDisabled={remove.error instanceof ApiError && remove.error.code === "IN_USE"}
         onConfirm={() => remove.mutate()}
         onCancel={() => {
           setConfirming(false);

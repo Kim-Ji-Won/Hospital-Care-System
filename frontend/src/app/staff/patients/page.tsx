@@ -12,6 +12,7 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { memberApi, memberKeys } from "@/lib/api/member";
 import type { PatientSearchItem } from "@/lib/api/types";
 import { patientNo, shortDate, shortDateTime } from "@/lib/date";
+import { josa } from "@/lib/josa";
 import { Button, Card, Chip, EmptyState, ErrorState, PageHeader, Skeleton, selectableRow } from "@/components/ui";
 
 const maskPhone = (phone: string) => phone.replace(/^(\d+)-(\d+)-(\d+)$/, (_, a, _b, c) => `${a}-••••-${c}`);
@@ -60,7 +61,7 @@ export default function PatientsPage() {
         <Skeleton rows={4} />
       ) : list.length === 0 ? (
         <EmptyState
-          title={`'${q}'으로 찾은 환자가 없습니다`}
+          title={`${josa(`'${q}'`, "으로/로")} 찾은 환자가 없습니다`}
           description="철자를 확인하거나 연락처 뒷자리로 다시 찾아보세요. 아직 가입하지 않은 분이면 웹 회원가입을 안내하세요."
           action={
             <Button variant="secondary" onClick={() => setInput("")}>
