@@ -1,6 +1,6 @@
 /** 04 처방·검사 관리 (박지수) — docs/api/04-order.md */
 import { api } from "./client";
-import type { CompleteExamRequest, Disease, Drug, Exam, ExamItem, ExamStatus, MyExam } from "./types";
+import type { CompleteExamRequest, Disease, DiseaseInput, Drug, DrugInput, Exam, ExamItem, ExamItemInput, ExamStatus, MyExam } from "./types";
 
 export const orderKeys = {
   all: ["order"] as const,
@@ -26,4 +26,16 @@ export const orderApi = {
   drugs: (q: string) => api.get<Drug[]>("/api/drugs", { q: q || undefined }),
   /** 4-7 검사항목 검색 */
   examItems: (q: string) => api.get<ExamItem[]>("/api/exam-items", { q: q || undefined }),
+  /** 4-8 질병 추가·수정(이름만)·삭제 */
+  createDisease: (body: DiseaseInput) => api.post<Disease>("/api/diseases", body),
+  updateDisease: (code: string, body: Partial<DiseaseInput>) => api.patch<Disease>(`/api/diseases/${encodeURIComponent(code)}`, body),
+  deleteDisease: (code: string) => api.delete(`/api/diseases/${encodeURIComponent(code)}`),
+  /** 4-9 약품 추가·수정·삭제 */
+  createDrug: (body: DrugInput) => api.post<Drug>("/api/drugs", body),
+  updateDrug: (code: string, body: Partial<DrugInput>) => api.patch<Drug>(`/api/drugs/${code}`, body),
+  deleteDrug: (code: string) => api.delete(`/api/drugs/${code}`),
+  /** 4-10 검사항목 추가·수정·삭제 */
+  createExamItem: (body: ExamItemInput) => api.post<ExamItem>("/api/exam-items", body),
+  updateExamItem: (code: string, body: Partial<ExamItemInput>) => api.patch<ExamItem>(`/api/exam-items/${code}`, body),
+  deleteExamItem: (code: string) => api.delete(`/api/exam-items/${code}`),
 };

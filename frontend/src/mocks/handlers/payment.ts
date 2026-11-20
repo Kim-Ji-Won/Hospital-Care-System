@@ -1,10 +1,10 @@
-/** 06 결제 관리 목 핸들러 — docs/api/06-payment.md 6-1 ~ 6-3 */
+/** 06 결제 관리 목 핸들러 — docs/api/06-payment.md 6-1 ~ 6-4 */
 import { http, HttpResponse } from "msw";
 import type { PaymentMethod } from "@/lib/api/types";
 import { now } from "@/lib/date";
 import { db, save } from "../db";
 import { apiError, requireRole, validationError } from "../http";
-import { toPayment } from "../logic";
+import { createPayment, inpatientAmount, outpatientAmount, toPayment } from "../logic";
 
 const METHODS: PaymentMethod[] = ["카드", "현금", "계좌이체"];
 
@@ -42,6 +42,22 @@ export const paymentHandlers = [
     p.paid_at = now();
     save();
     return HttpResponse.json(toPayment(p));
+  }),
+
+  // 6-4 결제 취소: 기존 결제를 먼저 '취소'로 바꾼 다음 지금 단가로 다시 계산한 '미결제'를 만듦 (함수형 UNIQUE 순서)
+  http.post("/api/payments/:paymentId/cancel", ({ params }) => {
+    const { deny } = requireRole("원무");
+    if (deny) return deny;
+    const d = db();
+    const p = d.payments.find((x) => x.payment_id === Number(params.paymentId));
+    if (!p) return apiError(404, "NOT_FOUND", "없는 결제번호입니다.");
+    if (p.status !== "완료") return apiError(409, "INVALID_STATUS", "'완료' 결제만 취소할 수 있습니다.");
+    p.status = "취소"; // 결제수단·결제일시는 그대로 둠
+    const admission = d.admissions.find((a) => a.decision_encounter_id === p.encounter_id);
+    const amount = admission?.discharged_at ? inpatientAmount(admission, admission.discharged_at) : outpatientAmount(p.encounter_id);
+    const created = createPayment(p.encounter_id, amount);
+    save();
+    return HttpResponse.json({ cancelled: toPayment(p), newPayment: toPayment(created) });
   }),
 
   // 6-3 내 결제 내역

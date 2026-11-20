@@ -1,10 +1,10 @@
-/** 01 회원 관리 목 핸들러 — docs/api/01-member.md 1-1 ~ 1-8 */
+/** 01 회원 관리 목 핸들러 — docs/api/01-member.md 1-1 ~ 1-11 */
 import { http, HttpResponse } from "msw";
-import type { Department, LoginRequest, PatientDetail, PatientProfile, SignupRequest, Staff } from "@/lib/api/types";
+import type { Department, LoginRequest, PatientDetail, PatientHistory, PatientProfile, PatientSearchItem, SignupRequest, Staff, UpdatePatientRequest } from "@/lib/api/types";
 import { db, save, type PatientRow } from "../db";
 import { apiError, requireRole, sessionUser, validationError } from "../http";
-import { departmentOf, staffOf, toMyReservation } from "../logic";
-import { now } from "@/lib/date";
+import { currentAdmissionOf, departmentOf, patientIdOfAdmission, staffOf, toMyReservation, toPayment } from "../logic";
+import { now, today } from "@/lib/date";
 
 function profileOf(p: PatientRow): PatientProfile {
   return {
@@ -179,5 +179,107 @@ export const memberHandlers = [
         loginId: s.login_id,
       }));
     return HttpResponse.json(list);
+  }),
+
+  // 1-9 환자 검색: 숫자만이면 환자번호 같음 또는 연락처 끝자리, 아니면 이름 포함. 최대 50명, 이름순
+  http.get("/api/patients", ({ request }) => {
+    const { deny } = requireRole("의사", "간호사", "원무");
+    if (deny) return deny;
+    const q = (new URL(request.url).searchParams.get("q") ?? "").trim();
+    if (!q || q.length > 50) return validationError({ q: "검색어를 1~50자로 보내세요." });
+    const digits = /^\d+$/.test(q);
+    const list: PatientSearchItem[] = db()
+      .patients.filter((p) => (digits ? p.patient_id === Number(q) || p.phone.replace(/-/g, "").endsWith(q) : p.name.includes(q)))
+      .sort((a, b) => a.name.localeCompare(b.name, "ko"))
+      .slice(0, 50)
+      .map((p) => ({ patientId: p.patient_id, name: p.name, birthDate: p.birth_date, gender: p.gender, phone: p.phone, admitted: !!currentAdmissionOf(p.patient_id) }));
+    return HttpResponse.json(list);
+  }),
+
+  // 1-10 환자 정보 수정: 고친 필드만. 환자번호·로그인ID는 고칠 수 없음
+  http.patch("/api/patients/:patientId", async ({ params, request }) => {
+    const { deny } = requireRole("의사", "간호사", "원무");
+    if (deny) return deny;
+    const p = db().patients.find((x) => x.patient_id === Number(params.patientId));
+    if (!p) return apiError(404, "NOT_FOUND", "없는 환자번호입니다.");
+    const b = (await request.json()) as UpdatePatientRequest & { patientId?: unknown; loginId?: unknown };
+    const f: Record<string, string> = {};
+    if (b.patientId !== undefined || b.loginId !== undefined) f.patientId = "환자번호와 로그인ID는 고칠 수 없습니다.";
+    if (b.name !== undefined && (!b.name.trim() || b.name.length > 50)) f.name = "이름은 1~50자로 입력하세요.";
+    if (b.birthDate !== undefined && (!/^\d{4}-\d{2}-\d{2}$/.test(b.birthDate) || b.birthDate < "1900-01-01" || b.birthDate >= today())) f.birthDate = "생년월일을 확인하세요.";
+    if (b.gender !== undefined && !["남", "여"].includes(b.gender)) f.gender = "성별을 고르세요.";
+    if (b.phone !== undefined && (!b.phone.trim() || !/^[\d-]{1,20}$/.test(b.phone))) f.phone = b.phone.trim() ? "숫자와 하이픈만 20자 이내로 입력하세요." : "연락처는 비워 둘 수 없습니다.";
+    if (b.address && b.address.length > 200) f.address = "주소는 200자 이내입니다.";
+    if (b.bloodType && b.bloodType.length > 10) f.bloodType = "혈액형은 10자 이내입니다.";
+    if (Object.keys(f).length) return validationError(f);
+    if (b.name !== undefined) p.name = b.name.trim();
+    if (b.birthDate !== undefined) p.birth_date = b.birthDate;
+    if (b.gender !== undefined) p.gender = b.gender;
+    if (b.phone !== undefined) p.phone = b.phone.trim();
+    if (b.address !== undefined) p.address = b.address?.trim() || null;
+    if (b.bloodType !== undefined) p.blood_type = b.bloodType?.trim() || null;
+    save();
+    return HttpResponse.json(profileOf(p));
+  }),
+
+  // 1-11 환자 이력: 종류별 배열, 각각 시각 내림차순. 검사·결제는 진료로, 입원은 결정 진료로 찾음
+  http.get("/api/patients/:patientId/history", ({ params }) => {
+    const { deny } = requireRole("의사", "간호사", "원무");
+    if (deny) return deny;
+    const d = db();
+    const pid = Number(params.patientId);
+    if (!d.patients.some((x) => x.patient_id === pid)) return apiError(404, "NOT_FOUND", "없는 환자번호입니다.");
+    const desc = <T,>(list: T[], key: (x: T) => string) => list.sort((a, b) => key(b).localeCompare(key(a)));
+    const encounters = d.encounters.filter((e) => e.patient_id === pid);
+    const encIds = new Set(encounters.map((e) => e.encounter_id));
+    const history: PatientHistory = {
+      reservations: desc(
+        d.reservations
+          .filter((r) => r.patient_id === pid)
+          .map((r) => {
+            const m = toMyReservation(r);
+            return { reservationId: m.reservationId, appointmentAt: m.appointmentAt, status: m.status, departmentName: m.departmentName, doctorName: m.doctorName, symptomNote: m.symptomNote };
+          }),
+        (x) => x.appointmentAt,
+      ),
+      encounters: desc(
+        encounters.map((e) => {
+          const primary = d.diagnoses.find((x) => x.encounter_id === e.encounter_id && x.is_primary === "Y");
+          return {
+            encounterId: e.encounter_id,
+            encounterAt: e.encounter_at,
+            encounterType: e.encounter_type,
+            departmentName: departmentOf(staffOf(e.doctor_id).department_code)?.name ?? "",
+            doctorName: staffOf(e.doctor_id).name,
+            primaryDiseaseCode: primary?.disease_code ?? null,
+            primaryDiseaseName: primary ? d.diseases.find((x) => x.disease_code === primary.disease_code)!.name : null,
+          };
+        }),
+        (x) => x.encounterAt,
+      ),
+      exams: desc(
+        d.exams
+          .filter((x) => encIds.has(x.encounter_id))
+          .map((x) => {
+            const item = d.examItems.find((i) => i.exam_code === x.exam_code)!;
+            return { examId: x.exam_id, examName: item.name, status: x.status, requestedAt: x.requested_at, performedAt: x.performed_at, resultValue: x.result_value, unit: item.unit, resultFlag: x.result_flag };
+          }),
+        (x) => x.requestedAt,
+      ),
+      admissions: desc(
+        d.admissions
+          .filter((a) => patientIdOfAdmission(a) === pid)
+          .map((a) => ({ admissionId: a.admission_id, admittedAt: a.admitted_at, dischargedAt: a.discharged_at, roomNo: a.room_no, attendingName: staffOf(a.attending_id).name })),
+        (x) => x.admittedAt,
+      ),
+      payments: desc(
+        d.payments
+          .filter((p) => encIds.has(p.encounter_id))
+          .map(toPayment)
+          .map((p) => ({ paymentId: p.paymentId, encounterId: p.encounterId, amount: p.amount, status: p.status, createdAt: p.createdAt, paidAt: p.paidAt })),
+        (x) => x.createdAt,
+      ),
+    };
+    return HttpResponse.json(history);
   }),
 ];
