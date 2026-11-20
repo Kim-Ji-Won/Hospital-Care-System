@@ -157,4 +157,78 @@ export function ErrorState({ title, cause, action }: { title: string; cause?: st
   );
 }
 
+// ---------- 확인 대화상자 ----------
+
+/**
+ * 되돌릴 수 없는 일(노쇼, 검사 완료, 결제 취소 등)에만 씁니다(S9).
+ * 위험 색을 쓰지 않고, 취소 쪽 버튼을 왼쪽에 둡니다.
+ */
+export function ConfirmDialog({
+  open,
+  title,
+  children,
+  confirmLabel,
+  cancelLabel = "닫기",
+  pending,
+  onConfirm,
+  onCancel,
+}: {
+  open: boolean;
+  title: string;
+  children?: ReactNode;
+  confirmLabel: string;
+  cancelLabel?: string;
+  pending?: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-ink/30 p-4" onClick={pending ? undefined : onCancel}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <p className="text-title font-bold text-navy">{title}</p>
+        {children && <div className="mt-3 text-body text-ink">{children}</div>}
+        <div className="mt-6 flex justify-end gap-2">
+          <Button variant="secondary" onClick={onCancel} disabled={pending}>
+            {cancelLabel}
+          </Button>
+          <Button onClick={onConfirm} disabled={pending}>
+            {pending ? "처리하는 중…" : confirmLabel}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------- 탭 ----------
+
+export function Tabs<T extends string>({ value, onChange, items }: { value: T; onChange: (v: T) => void; items: { value: T; label: string }[] }) {
+  return (
+    <div role="tablist" className="flex gap-1 border-b border-sky">
+      {items.map((t) => (
+        <button
+          key={t.value}
+          type="button"
+          role="tab"
+          aria-selected={value === t.value}
+          onClick={() => onChange(t.value)}
+          className={cx(
+            "-mb-px border-b-2 px-4 py-2.5 text-body font-semibold",
+            value === t.value ? "border-navy text-navy" : "border-transparent text-ink-sub hover:text-navy",
+          )}
+        >
+          {t.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export { cx };

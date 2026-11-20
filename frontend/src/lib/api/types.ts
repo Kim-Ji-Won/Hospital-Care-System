@@ -109,3 +109,251 @@ export interface Department {
   phone: string | null;
   staffCount: number;
 }
+
+// ---------- 02 예약 관리 ----------
+
+/** 2-1 예약 가능한 날짜 */
+export interface BookingDate {
+  date: DateOnly;
+  available: boolean;
+}
+
+/** 2-2 예약 가능한 시간 */
+export interface BookingSlot {
+  time: TimeOnly;
+  available: boolean;
+  mine: boolean;
+}
+
+/** 내 예약 객체 (2-3, 2-4) */
+export interface MyReservation {
+  reservationId: number;
+  appointmentAt: DateTime;
+  status: ReservationStatus;
+  symptomNote: string | null;
+  createdAt: DateTime;
+  departmentCode: string;
+  departmentName: string;
+  departmentLocation: string | null;
+  doctorId: number;
+  doctorName: string;
+  encounterId: number | null;
+}
+
+export interface CreateReservationRequest {
+  departmentCode: string;
+  appointmentAt: DateTime;
+  symptomNote: string | null;
+}
+
+/** 예약 항목 (의료진용, 2-5 ~ 2-7) */
+export interface StaffReservation {
+  reservationId: number;
+  appointmentAt: DateTime;
+  status: ReservationStatus;
+  symptomNote: string | null;
+  patient: PatientSummary;
+  scheduleId: number;
+  doctorId: number;
+  doctorName: string;
+  departmentCode: string;
+  departmentName: string;
+  encounterId: number | null;
+}
+
+/** 휴진 객체 */
+export interface DayOff {
+  dayOffId: number;
+  scheduleId: number;
+  offDate: DateOnly;
+  reason: string | null;
+  doctorId: number;
+  doctorName?: string;
+  dayOfWeek: DayOfWeek;
+  startTime: TimeOnly;
+  endTime: TimeOnly;
+}
+
+/** 2-5 오늘 진료 목록 */
+export interface DailyReservations {
+  date: DateOnly;
+  dayOffs: DayOff[];
+  reservations: StaffReservation[];
+}
+
+// ---------- 03 진료 관리 ----------
+
+export interface EncounterDiagnosis {
+  diseaseCode: string;
+  diseaseName: string;
+  isPrimary: boolean;
+}
+
+export interface EncounterPrescriptionItem {
+  drugCode: string;
+  drugName: string;
+  unit: string;
+  dose: number;
+  timesPerDay: number;
+  durationDays: number;
+  instruction: string;
+}
+
+export interface EncounterPrescription {
+  prescriptionId: number;
+  dispenseType: DispenseType;
+  prescribedAt: DateTime;
+  items: EncounterPrescriptionItem[];
+}
+
+export interface EncounterExam {
+  examId: number;
+  examCode: string;
+  examName: string;
+  category: ExamCategory;
+  status: ExamStatus;
+  requestedAt: DateTime;
+}
+
+/** 진료 상세 객체 (3-2, 3-3) */
+export interface EncounterDetail {
+  encounterId: number;
+  encounterType: EncounterType;
+  encounterAt: DateTime;
+  patient: PatientSummary;
+  doctorId: number;
+  doctorName: string;
+  departmentCode: string;
+  departmentName: string;
+  reservationId: number | null;
+  admissionId: number | null;
+  symptom: string | null;
+  finding: string;
+  diagnoses: EncounterDiagnosis[];
+  prescriptions: EncounterPrescription[];
+  exams: EncounterExam[];
+  admissionDecided: boolean;
+  editable: boolean;
+}
+
+/** 3-1 진료 기록 저장 요청 */
+export interface CreateEncounterRequest {
+  reservationId: number | null;
+  admissionId: number | null;
+  encounterAt: DateTime | null;
+  symptom: string | null;
+  finding: string;
+  diagnoses: { diseaseCode: string; isPrimary: boolean }[];
+  prescriptions: {
+    dispenseType: DispenseType;
+    items: { drugCode: string; dose: number; timesPerDay: number; durationDays: number; instruction: string }[];
+  }[];
+  exams: { examCode: string }[];
+  admissionDecided: boolean;
+}
+
+export interface CreateEncounterResponse {
+  encounterId: number;
+  encounterType: EncounterType;
+  encounterAt: DateTime;
+  reservationId: number | null;
+  admissionId: number | null;
+  admissionDecided: boolean;
+  paymentId: number | null;
+}
+
+// ---------- 04 처방·검사 관리 ----------
+
+/** 검사 객체 (4-1 ~ 4-3) */
+export interface Exam {
+  examId: number;
+  status: ExamStatus;
+  examCode: string;
+  examName: string;
+  category: ExamCategory;
+  referenceRange: string | null;
+  unit: string | null;
+  patient: PatientSummary;
+  encounterId: number;
+  requestDoctorId: number;
+  requestDoctorName: string;
+  requestedAt: DateTime;
+  performedAt: DateTime | null;
+  resultValue: number | null;
+  resultFlag: ResultFlag | null;
+  readingNote: string | null;
+  readerId: number | null;
+  readerName: string | null;
+}
+
+export interface CompleteExamRequest {
+  resultValue: number | null;
+  resultFlag: ResultFlag;
+  readingNote: string;
+}
+
+/** 4-4 내 검사 결과 */
+export interface MyExam {
+  examId: number;
+  examCode: string;
+  examName: string;
+  category: ExamCategory;
+  referenceRange: string | null;
+  unit: string | null;
+  resultValue: number | null;
+  resultFlag: ResultFlag;
+  readingNote: string;
+  readerName: string;
+  performedAt: DateTime;
+  encounterId: number;
+  encounterAt: DateTime;
+}
+
+export interface Disease {
+  diseaseCode: string;
+  name: string;
+  usageCount: number;
+}
+
+export interface Drug {
+  drugCode: string;
+  name: string;
+  ingredient: string | null;
+  form: string;
+  unit: string;
+  unitPrice: number;
+}
+
+export interface ExamItem {
+  examCode: string;
+  name: string;
+  category: ExamCategory;
+  referenceRange: string | null;
+  unit: string | null;
+  fee: number;
+}
+
+// ---------- 06 결제 관리 ----------
+
+/** 결제 객체 */
+export interface Payment {
+  paymentId: number;
+  encounterId: number;
+  billingType: BillingType;
+  amount: number;
+  status: PaymentStatus;
+  method: PaymentMethod | null;
+  createdAt: DateTime;
+  paidAt: DateTime | null;
+  encounterAt: DateTime;
+  departmentName: string;
+  admission: { admissionId: number; roomNo: number; admittedAt: DateTime; dischargedAt: DateTime | null } | null;
+  includes: {
+    consultationCount: number;
+    examNames: string[];
+    inHousePrescriptionCount: number;
+    hasOutsidePrescription: boolean;
+    roundCount: number;
+    admissionDays: number | null;
+  };
+}

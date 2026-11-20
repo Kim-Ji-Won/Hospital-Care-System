@@ -9,10 +9,18 @@ import { setupWorker } from "msw/browser";
 import type { RequestHandler } from "msw";
 import { mockedAreas } from "@/lib/demo";
 import { memberHandlers } from "./handlers/member";
+import { reservationHandlers } from "./handlers/reservation";
+import { encounterHandlers } from "./handlers/encounter";
+import { orderHandlers } from "./handlers/order";
+import { paymentHandlers } from "./handlers/payment";
 
 /** 영역 이름은 docs/api 파일 이름과 같습니다. 화면을 만들 때마다 여기에 더합니다. */
 const handlersByArea: Record<string, RequestHandler[]> = {
   member: memberHandlers,
+  reservation: reservationHandlers,
+  encounter: encounterHandlers,
+  order: orderHandlers,
+  payment: paymentHandlers,
 };
 
 export async function startMockWorker() {

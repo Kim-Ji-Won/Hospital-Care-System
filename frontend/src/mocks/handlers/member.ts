@@ -3,6 +3,8 @@ import { http, HttpResponse } from "msw";
 import type { Department, LoginRequest, PatientDetail, PatientProfile, SignupRequest } from "@/lib/api/types";
 import { db, save, type PatientRow } from "../db";
 import { apiError, requireRole, sessionUser, validationError } from "../http";
+import { departmentOf, staffOf, toMyReservation } from "../logic";
+import { now } from "@/lib/date";
 
 function profileOf(p: PatientRow): PatientProfile {
   return {
@@ -103,9 +105,38 @@ export const memberHandlers = [
   http.get("/api/patients/:patientId", ({ params }) => {
     const { deny } = requireRole("의사", "간호사", "원무");
     if (deny) return deny;
-    const p = db().patients.find((x) => x.patient_id === Number(params.patientId));
+    const d = db();
+    const p = d.patients.find((x) => x.patient_id === Number(params.patientId));
     if (!p) return apiError(404, "NOT_FOUND", "없는 환자번호입니다.");
-    const detail: PatientDetail = { ...profileOf(p), lastEncounter: null, nextReservation: null, currentAdmission: null };
+
+    const last = d.encounters.filter((e) => e.patient_id === p.patient_id).sort((a, b) => b.encounter_at.localeCompare(a.encounter_at))[0];
+    const primary = last && d.diagnoses.find((x) => x.encounter_id === last.encounter_id && x.is_primary === "Y");
+    const next = d.reservations
+      .filter((r) => r.patient_id === p.patient_id && r.status === "예약" && r.appointment_at >= now())
+      .sort((a, b) => a.appointment_at.localeCompare(b.appointment_at))[0];
+    const admission = d.admissions.find(
+      (a) => !a.discharged_at && d.encounters.find((e) => e.encounter_id === a.decision_encounter_id)?.patient_id === p.patient_id,
+    );
+    const nextRes = next ? toMyReservation(next) : null;
+
+    const detail: PatientDetail = {
+      ...profileOf(p),
+      lastEncounter: last
+        ? {
+            encounterId: last.encounter_id,
+            encounterAt: last.encounter_at,
+            encounterType: last.encounter_type,
+            departmentName: departmentOf(staffOf(last.doctor_id).department_code)?.name ?? "",
+            primaryDiseaseName: primary ? (d.diseases.find((x) => x.disease_code === primary.disease_code)?.name ?? null) : null,
+          }
+        : null,
+      nextReservation: nextRes
+        ? { reservationId: nextRes.reservationId, appointmentAt: nextRes.appointmentAt, departmentName: nextRes.departmentName, doctorName: nextRes.doctorName }
+        : null,
+      currentAdmission: admission
+        ? { admissionId: admission.admission_id, roomNo: admission.room_no, ward: d.rooms.find((r) => r.room_no === admission.room_no)?.ward ?? "", admittedAt: admission.admitted_at }
+        : null,
+    };
     return HttpResponse.json(detail);
   }),
 
