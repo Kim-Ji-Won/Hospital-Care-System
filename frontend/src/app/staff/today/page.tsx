@@ -16,7 +16,7 @@ import { useAuth } from "@/lib/auth";
 import { hm, longDate, shortDate, timeOf, today } from "@/lib/date";
 import { QueryView } from "@/components/query-view";
 import { PatientName, patientLine } from "@/components/patient-label";
-import { Button, Card, Chip, ConfirmDialog, ErrorState, PageHeader, Skeleton, cx } from "@/components/ui";
+import { Button, Card, Chip, ConfirmDialog, ErrorState, PageHeader, Skeleton, cx, selectableRow } from "@/components/ui";
 
 export default function TodayPage() {
   const { user } = useAuth();
@@ -132,9 +132,7 @@ function ReservationTable({
           {list.map((r) => (
             <tr
               key={r.reservationId}
-              onClick={() => onSelect(r.reservationId)}
-              aria-selected={r.reservationId === selectedId}
-              className={cx("cursor-pointer border-b border-skeleton last:border-0 hover:bg-page", r.reservationId === selectedId && "bg-select-bg hover:bg-select-bg")}
+              {...selectableRow(r.reservationId === selectedId, () => onSelect(r.reservationId), "last:border-0")}
             >
               <td className="px-4 py-3 text-item font-semibold">{timeOf(r.appointmentAt)}</td>
               <td className="px-4 py-3">

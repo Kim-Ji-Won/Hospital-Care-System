@@ -115,7 +115,7 @@ function Rows({ list, withActions }: { list: MyReservation[]; withActions?: bool
 
   return (
     <>
-    <div className="overflow-x-auto rounded-xl border border-sky bg-white">
+    <div tabIndex={0} role="region" aria-label="예약 표" className="overflow-x-auto rounded-xl border border-sky bg-white outline-none focus-visible:ring-2 focus-visible:ring-navy">
       {/* 열 너비를 고정해 두 표의 칸이 같은 자리에 오게 하고, 남는 폭은 증상 메모가 가져감 */}
       <table className="w-full min-w-[760px] table-fixed text-left text-body break-keep">
         <colgroup>
@@ -133,7 +133,7 @@ function Rows({ list, withActions }: { list: MyReservation[]; withActions?: bool
             <th className="px-5 py-3 font-semibold">담당의</th>
             <th className="px-5 py-3 font-semibold">증상 메모</th>
             <th className="px-5 py-3 font-semibold">상태</th>
-            {withActions && <th className="px-5 py-3" />}
+            {withActions && <th className="px-5 py-3"><span className="sr-only">변경·취소</span></th>}
           </tr>
         </thead>
         <tbody>

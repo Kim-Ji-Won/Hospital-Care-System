@@ -15,7 +15,7 @@ import { memberApi, memberKeys } from "@/lib/api/member";
 import type { PendingAdmission } from "@/lib/api/types";
 import { age, patientNo, shortDate, shortDateTime, today, won } from "@/lib/date";
 import { QueryView } from "@/components/query-view";
-import { Button, EmptyState, ErrorState, PageHeader, Skeleton, TextField, cx } from "@/components/ui";
+import { Button, EmptyState, ErrorState, PageHeader, Skeleton, TextField, cx, selectableRow } from "@/components/ui";
 
 export default function AssignPage() {
   return (
@@ -175,9 +175,7 @@ function AssignForm({ pending: p }: { pending: PendingAdmission }) {
                   {list.map((r) => (
                     <tr
                       key={r.roomNo}
-                      onClick={() => setRoomNo(r.roomNo)}
-                      aria-selected={r.roomNo === roomNo}
-                      className={cx("cursor-pointer border-b border-skeleton hover:bg-page", r.roomNo === roomNo && "bg-select-bg hover:bg-select-bg")}
+                      {...selectableRow(r.roomNo === roomNo, () => setRoomNo(r.roomNo))}
                     >
                       <td className="px-2 py-2.5 font-bold text-ink">
                         {r.roomNo}호 · {r.ward}

@@ -7,7 +7,7 @@
 import { useState, type ReactNode } from "react";
 import { keepPreviousData, useMutation, useQuery, useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { ApiError } from "@/lib/api/client";
-import { Button, Card, ConfirmDialog, EmptyState, ErrorState, Skeleton, TextField, cx } from "@/components/ui";
+import { Button, Card, ConfirmDialog, EmptyState, ErrorState, Skeleton, TextField, cx, selectableRow } from "@/components/ui";
 
 export type FormValues = Record<string, string>;
 
@@ -117,12 +117,10 @@ export function MasterTable<T>({ config, addRequested, onAddHandled }: { config:
                 return (
                   <tr
                     key={String(id)}
-                    onClick={() => {
+                    {...selectableRow(id === selected && !addRequested, () => {
                       onAddHandled();
                       setSelected(id);
-                    }}
-                    aria-selected={id === selected && !addRequested}
-                    className={cx("cursor-pointer border-b border-skeleton hover:bg-page", id === selected && !addRequested && "bg-select-bg hover:bg-select-bg")}
+                    })}
                   >
                     {config.columns.map((c, i) => (
                       <td key={c.label} className={cx("px-2 py-2.5", i === 0 && "font-bold text-ink", c.className)}>

@@ -4,7 +4,7 @@
  * 진료 기록 입력 부품 — S2 진료 기록 작성(외래)과 S2b 회진 기록이 함께 씁니다.
  * S2a 추가 패널은 질병·약품·검사를 검색해 목록에서 고르기만 합니다(FK).
  */
-import { useState } from "react";
+import { cloneElement, isValidElement, useEffect, useId, useRef, useState, type ReactElement } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { orderApi, orderKeys } from "@/lib/api/order";
 import type { DispenseType, Drug } from "@/lib/api/types";
@@ -32,14 +32,26 @@ export function textareaClass(error: boolean) {
 }
 
 export function Field({ label, error, extra, children }: { label: string; error?: string; extra?: React.ReactNode; children: React.ReactNode }) {
+  // 이름표를 입력칸과 이어 화면 읽기 프로그램이 칸 이름을 읽게 함 (옆의 "특이 소견 없음" 버튼은 이름표 밖에 둠)
+  const id = useId();
+  const errorId = `${id}-error`;
+  const control = isValidElement(children)
+    ? cloneElement(children as ReactElement<{ id?: string; "aria-describedby"?: string; "aria-invalid"?: boolean }>, { id, "aria-describedby": error ? errorId : undefined, "aria-invalid": error ? true : undefined })
+    : children;
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between">
-        <span className="text-body font-semibold text-ink-sub">{label}</span>
+        <label htmlFor={id} className="text-body font-semibold text-ink-sub">
+          {label}
+        </label>
         {extra}
       </div>
-      {children}
-      {error && <span className="text-caption text-error-ink">{error}</span>}
+      {control}
+      {error && (
+        <span id={errorId} className="text-caption text-error-ink">
+          {error}
+        </span>
+      )}
     </div>
   );
 }
@@ -100,6 +112,9 @@ export function AddPanel({
 }) {
   const [q, setQ] = useState("");
   const [drug, setDrug] = useState<Drug | null>(null);
+  // 버튼으로 패널을 열었으니 검색칸으로 포커스를 옮김
+  const searchRef = useRef<HTMLInputElement>(null);
+  useEffect(() => searchRef.current?.focus(), [mode]);
   const diseases = useQuery({ queryKey: orderKeys.diseases(q), queryFn: () => orderApi.diseases(q), enabled: mode === "disease" });
   const drugs = useQuery({ queryKey: orderKeys.drugs(q), queryFn: () => orderApi.drugs(q), enabled: mode === "drug" });
   const examItems = useQuery({ queryKey: orderKeys.examItems(q), queryFn: () => orderApi.examItems(q), enabled: mode === "exam" });
@@ -126,7 +141,8 @@ export function AddPanel({
         />
       )}
       <input
-        autoFocus
+        ref={searchRef}
+        aria-label={placeholder}
         value={q}
         onChange={(e) => {
           setQ(e.target.value);

@@ -16,7 +16,7 @@ import { paymentKeys } from "@/lib/api/payment";
 import type { Admission, AdmissionDetail, DischargeResponse } from "@/lib/api/types";
 import { daysBetween, fromInputDateTime, now, shortDate, shortDateTime, toInputDateTime, today, won } from "@/lib/date";
 import { QueryView } from "@/components/query-view";
-import { Button, Card, EmptyState, ErrorState, PageHeader, Skeleton, cx } from "@/components/ui";
+import { Button, Card, EmptyState, ErrorState, PageHeader, Skeleton, cx, selectableRow } from "@/components/ui";
 
 export default function DischargePage() {
   return (
@@ -85,9 +85,7 @@ function DueTodayTable({ list, selectedId, onSelect }: { list: Admission[]; sele
             {list.map((a) => (
               <tr
                 key={a.admissionId}
-                onClick={() => onSelect(a.admissionId)}
-                aria-selected={a.admissionId === selectedId}
-                className={cx("cursor-pointer border-b border-skeleton hover:bg-page", a.admissionId === selectedId && "bg-select-bg hover:bg-select-bg")}
+                {...selectableRow(a.admissionId === selectedId, () => onSelect(a.admissionId))}
               >
                 <td className="px-2 py-2.5 font-bold text-ink">{a.patient.name}</td>
                 <td className="px-2 py-2.5">{a.roomNo}호</td>
