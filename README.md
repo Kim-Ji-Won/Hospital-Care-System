@@ -170,4 +170,4 @@
 
 - 설계 문서 — 통합 ERD, 시스템 구성도, 테이블정의서 수정본 작성
 - 프론트엔드 — Figma 화면 설계 완료, 코드 구현 예정
-- 백엔드 — 3인 세부 업무분담 예정
+- 백엔드 — Spring Boot 프로젝트·테이블 DDL 준비, API 구현 예정 (실행 방법: [backend/README.md](backend/README.md))
