@@ -3,6 +3,8 @@
  * 행(snake_case) → API 모양(camelCase) 변환도 여기서 합니다.
  */
 import type {
+  Admission,
+  AdmissionDetail,
   EncounterDetail,
   Exam,
   MyReservation,
@@ -11,7 +13,7 @@ import type {
   StaffReservation,
 } from "@/lib/api/types";
 import { dayOfWeek, now, parse, toDate } from "@/lib/date";
-import { db, type EncounterRow, type ExamRow, type PaymentRow, type ReservationRow, type ScheduleRow } from "./db";
+import { db, type AdmissionRow, type EncounterRow, type ExamRow, type PaymentRow, type ReservationRow, type ScheduleRow } from "./db";
 
 /** README 고정값 */
 export const CONSULTATION_FEE = 15000;
@@ -191,9 +193,7 @@ export function toPayment(p: PaymentRow): Payment {
   const rounds = admission ? d.encounters.filter((e) => e.admission_id === admission.admission_id) : [];
   const bases = [encounter, ...rounds].map((e) => billingBasis(e.encounter_id));
   const doctor = staffOf(encounter.doctor_id);
-  const days = admission?.discharged_at
-    ? Math.max(1, Math.round((parse(admission.discharged_at.slice(0, 10)).getTime() - parse(admission.admitted_at.slice(0, 10)).getTime()) / 86_400_000))
-    : null;
+  const days = admission?.discharged_at ? admissionDays(admission.admitted_at, admission.discharged_at) : null;
   return {
     paymentId: p.payment_id,
     encounterId: p.encounter_id,
@@ -297,4 +297,84 @@ export function toExam(x: ExamRow): Exam {
     readerId: x.reader_id,
     readerName: reader?.name ?? null,
   };
+}
+
+// ---------- 05 입·퇴원 ----------
+
+/** 입원일수 = 퇴원 날짜 − 입원 날짜(날짜만 비교). 같은 날 퇴원하면 1일 */
+export function admissionDays(admittedAt: string, dischargedAt: string) {
+  const ms = parse(dischargedAt.slice(0, 10)).getTime() - parse(admittedAt.slice(0, 10)).getTime();
+  return Math.max(1, Math.round(ms / 86_400_000));
+}
+
+/** 입원에는 환자번호가 없음: 입원 → 결정진료번호 → 진료.환자번호 */
+export function patientIdOfAdmission(a: AdmissionRow) {
+  return db().encounters.find((e) => e.encounter_id === a.decision_encounter_id)!.patient_id;
+}
+
+/** 퇴원일시가 NULL인 입원 수 */
+export function occupiedBeds(roomNo: number) {
+  return db().admissions.filter((a) => a.room_no === roomNo && !a.discharged_at).length;
+}
+
+export function currentAdmissionOf(patientId: number) {
+  return db().admissions.find((a) => !a.discharged_at && patientIdOfAdmission(a) === patientId) ?? null;
+}
+
+/** 5-2 배정 대기: '취소'가 아닌 결제도, 이 진료를 결정진료번호로 하는 입원도 없는 외래 진료 */
+export function isPendingDecision(e: EncounterRow) {
+  const d = db();
+  return (
+    e.encounter_type === "외래" &&
+    !d.payments.some((p) => p.encounter_id === e.encounter_id && p.status !== "취소") &&
+    !d.admissions.some((a) => a.decision_encounter_id === e.encounter_id)
+  );
+}
+
+export function roundsOf(admissionId: number) {
+  return db()
+    .encounters.filter((e) => e.admission_id === admissionId)
+    .sort((a, b) => b.encounter_at.localeCompare(a.encounter_at));
+}
+
+export function toAdmission(a: AdmissionRow): Admission {
+  const d = db();
+  const attending = staffOf(a.attending_id);
+  return {
+    admissionId: a.admission_id,
+    patient: patientSummary(patientIdOfAdmission(a)),
+    decisionEncounterId: a.decision_encounter_id,
+    attendingId: attending.staff_id,
+    attendingName: attending.name,
+    roomNo: a.room_no,
+    ward: d.rooms.find((r) => r.room_no === a.room_no)?.ward ?? "",
+    admittedAt: a.admitted_at,
+    expectedDischargeDate: a.expected_discharge_date,
+    dischargedAt: a.discharged_at,
+    reason: a.reason,
+  };
+}
+
+export function toAdmissionDetail(a: AdmissionRow): AdmissionDetail {
+  const rounds = roundsOf(a.admission_id);
+  const bases = rounds.map((e) => billingBasis(e.encounter_id));
+  return {
+    ...toAdmission(a),
+    rounds: rounds.map((e) => ({ encounterId: e.encounter_id, encounterAt: e.encounter_at, doctorId: e.doctor_id, doctorName: staffOf(e.doctor_id).name, finding: e.finding })),
+    summary: {
+      roundCount: rounds.length,
+      examCount: bases.reduce((n, b) => n + b.examNames.length, 0),
+      inHousePrescriptionCount: bases.reduce((n, b) => n + b.inHousePrescriptionCount, 0),
+    },
+  };
+}
+
+/** 입원 = 결정 진료의 외래 금액 + 회진의 검사비·약제비(진찰료 없음) + 입원료 × 입원일수. 약제비는 모두 더한 뒤 한 번 반올림 */
+export function inpatientAmount(a: AdmissionRow, dischargedAt: string) {
+  const d = db();
+  const bases = [a.decision_encounter_id, ...roundsOf(a.admission_id).map((e) => e.encounter_id)].map(billingBasis);
+  const examFee = bases.reduce((n, b) => n + b.examFee, 0);
+  const drugCost = Math.round(bases.reduce((n, b) => n + b.drugCost, 0));
+  const room = d.rooms.find((r) => r.room_no === a.room_no)!;
+  return CONSULTATION_FEE + examFee + drugCost + room.daily_fee * admissionDays(a.admitted_at, dischargedAt);
 }

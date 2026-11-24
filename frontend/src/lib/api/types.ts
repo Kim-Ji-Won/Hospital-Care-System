@@ -357,3 +357,87 @@ export interface Payment {
     admissionDays: number | null;
   };
 }
+
+// ---------- 05 입·퇴원 ----------
+
+/** 5-1 병실 현황 */
+export interface Room {
+  roomNo: number;
+  ward: string;
+  bedCount: number;
+  /** 퇴원일시가 NULL인 입원 수 (테이블에 없는 값) */
+  occupiedBeds: number;
+  dailyFee: number;
+}
+
+/** 5-2 입원 배정 대기 */
+export interface PendingAdmission {
+  decisionEncounterId: number;
+  decidedAt: DateTime;
+  patient: PatientSummary;
+  doctorId: number;
+  doctorName: string;
+  departmentName: string;
+}
+
+/** 입원 객체 (5-3 ~ 5-6) */
+export interface Admission {
+  admissionId: number;
+  patient: PatientSummary;
+  decisionEncounterId: number;
+  attendingId: number;
+  attendingName: string;
+  roomNo: number;
+  ward: string;
+  admittedAt: DateTime;
+  /** null이면 화면에 "미정" */
+  expectedDischargeDate: DateOnly | null;
+  dischargedAt: DateTime | null;
+  reason: string;
+}
+
+export interface AdmissionRound {
+  encounterId: number;
+  encounterAt: DateTime;
+  doctorId: number;
+  doctorName: string;
+  finding: string;
+}
+
+/** 5-5 입원 한 건: 입원 객체 + 회진(진료일시 내림차순) + 건수 */
+export interface AdmissionDetail extends Admission {
+  rounds: AdmissionRound[];
+  summary: { roundCount: number; examCount: number; inHousePrescriptionCount: number };
+}
+
+/** 5-3 병실 배정 */
+export interface CreateAdmissionRequest {
+  decisionEncounterId: number;
+  roomNo: number;
+  attendingId: number;
+  reason: string;
+  expectedDischargeDate: DateOnly | null;
+}
+
+/** 5-6 퇴원 처리 응답 */
+export interface DischargeResponse {
+  admission: Admission;
+  payment: { paymentId: number; encounterId: number; amount: number; status: PaymentStatus };
+}
+
+/** 5-7 내 입원 내역: 입원 객체에서 patient를 빼고 회진을 더한 모양 */
+export interface MyAdmission extends Omit<Admission, "patient"> {
+  rounds: { encounterAt: DateTime; doctorName: string; finding: string }[];
+}
+
+/** 1-8 의료진 객체 (비밀번호해시는 내보내지 않음) */
+export interface Staff {
+  staffId: number;
+  name: string;
+  jobType: JobType;
+  position: string | null;
+  departmentCode: string | null;
+  departmentName: string | null;
+  phone: string;
+  loginId: string;
+}

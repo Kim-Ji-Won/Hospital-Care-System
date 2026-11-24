@@ -4,7 +4,7 @@
  * S2 진료 기록 작성 + S2a 진단·처방·검사 추가 — API 2-6, 1-6, 3-1, 4-5, 4-6, 4-7
  * 증상·소견·진단·처방·검사 요청·입원 결정을 한 화면에서 한 번에 저장합니다(주진단 1건은 등록 트랜잭션 안에서 확인).
  * 저장하면 예약이 '완료'가 되고, 입원 결정이 아니면 '미결제' 결제가 함께 만들어집니다. 의사는 금액을 다루지 않습니다.
- * 회진(S2b)은 2순위에서 같은 화면에 붙입니다.
+ * 입력 부품은 components/encounter-parts.tsx에 있고 S2b 회진 기록이 함께 씁니다.
  */
 import { Suspense, useState } from "react";
 import Link from "next/link";
@@ -13,35 +13,21 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError } from "@/lib/api/client";
 import { encounterApi, encounterKeys } from "@/lib/api/encounter";
 import { memberApi, memberKeys } from "@/lib/api/member";
-import { orderApi, orderKeys } from "@/lib/api/order";
+import { orderKeys } from "@/lib/api/order";
 import { paymentKeys } from "@/lib/api/payment";
 import { reservationApi, reservationKeys } from "@/lib/api/reservation";
-import type { DispenseType, Drug, StaffReservation } from "@/lib/api/types";
+import type { DispenseType, StaffReservation } from "@/lib/api/types";
 import { useAuth } from "@/lib/auth";
 import { shortDateTime, won } from "@/lib/date";
 import { patientLine } from "@/components/patient-label";
-import { Button, Card, Chip, EmptyState, ErrorState, PageHeader, Skeleton, Tabs, cx } from "@/components/ui";
+import { Button, Card, Chip, EmptyState, ErrorState, PageHeader, Skeleton } from "@/components/ui";
+import { AddPanel, Field, Row, Section, textareaClass, type Adding, type DrugDraft, type ExamDraft } from "@/components/encounter-parts";
 
 interface DiagnosisDraft {
   diseaseCode: string;
   name: string;
   isPrimary: boolean;
 }
-interface DrugDraft {
-  drugCode: string;
-  name: string;
-  unit: string;
-  dose: number;
-  timesPerDay: number;
-  durationDays: number;
-  instruction: string;
-}
-interface ExamDraft {
-  examCode: string;
-  name: string;
-  fee: number;
-}
-type Adding = null | "disease" | "drug" | "exam";
 
 export default function NewEncounterPage() {
   return (
@@ -303,214 +289,5 @@ function EncounterForm({ reservation }: { reservation: StaffReservation }) {
         )}
       </div>
     </>
-  );
-}
-
-function textareaClass(error: boolean) {
-  return cx("w-full rounded-xl border bg-white px-4 py-3 text-item outline-none focus:border-navy", error ? "border-warn" : "border-line/60");
-}
-
-function Field({ label, error, extra, children }: { label: string; error?: string; extra?: React.ReactNode; children: React.ReactNode }) {
-  return (
-    <div className="flex flex-col gap-2">
-      <div className="flex items-center justify-between">
-        <span className="text-body font-semibold text-ink-sub">{label}</span>
-        {extra}
-      </div>
-      {children}
-      {error && <span className="text-caption text-error-ink">{error}</span>}
-    </div>
-  );
-}
-
-function Section({ title, error, onAdd, addLabel, children }: { title: string; error?: string; onAdd?: () => void; addLabel?: string; children: React.ReactNode }) {
-  return (
-    <section className={cx("rounded-xl border bg-white p-4", error ? "border-warn" : "border-sky")}>
-      <div className="mb-3 flex items-center justify-between">
-        <p className="text-item font-semibold text-ink">{title}</p>
-        {onAdd && (
-          <button type="button" onClick={onAdd} className="text-body font-semibold text-navy hover:underline">
-            {addLabel}
-          </button>
-        )}
-      </div>
-      <div className="flex flex-col gap-2">{children}</div>
-      {error && <p className="mt-2 text-caption text-error-ink">{error}</p>}
-    </section>
-  );
-}
-
-function Row({ children, onRemove }: { children: React.ReactNode; onRemove: () => void }) {
-  return (
-    <div className="flex items-center justify-between gap-3 rounded-lg bg-page px-3 py-2">
-      <div className="flex flex-1 items-center justify-between gap-3">{children}</div>
-      <button type="button" onClick={onRemove} aria-label="빼기" className="text-ink-sub hover:text-navy">
-        ×
-      </button>
-    </div>
-  );
-}
-
-/** S2a: 질병·약품·검사를 검색해 넣는 오른쪽 패널. 목록에서 고르기만 가능(FK) */
-function AddPanel({
-  mode,
-  dispenseType,
-  onDispenseType,
-  added,
-  onAddDisease,
-  onAddDrug,
-  onAddExam,
-  onClose,
-}: {
-  mode: Exclude<Adding, null>;
-  dispenseType: DispenseType;
-  onDispenseType: (t: DispenseType) => void;
-  added: Record<"disease" | "drug" | "exam", string[]>;
-  onAddDisease: (code: string, name: string) => void;
-  onAddDrug: (item: DrugDraft) => void;
-  onAddExam: (x: ExamDraft) => void;
-  onClose: () => void;
-}) {
-  const [q, setQ] = useState("");
-  const [drug, setDrug] = useState<Drug | null>(null);
-  const diseases = useQuery({ queryKey: orderKeys.diseases(q), queryFn: () => orderApi.diseases(q), enabled: mode === "disease" });
-  const drugs = useQuery({ queryKey: orderKeys.drugs(q), queryFn: () => orderApi.drugs(q), enabled: mode === "drug" });
-  const examItems = useQuery({ queryKey: orderKeys.examItems(q), queryFn: () => orderApi.examItems(q), enabled: mode === "exam" });
-  const title = mode === "disease" ? "진단 추가" : mode === "drug" ? "약품 추가" : "검사 추가";
-  const placeholder = mode === "disease" ? "질병명, 코드로 검색" : mode === "drug" ? "약품명, 코드, 성분으로 검색" : "검사명, 코드로 검색";
-  const active = mode === "disease" ? diseases : mode === "drug" ? drugs : examItems;
-
-  return (
-    <Card className="flex flex-col gap-4 self-start">
-      <div className="flex items-center justify-between">
-        <p className="text-item font-semibold">{title}</p>
-        <Button variant="ghost" className="h-8 px-2" onClick={onClose}>
-          닫기
-        </Button>
-      </div>
-      {mode === "drug" && (
-        <Tabs
-          value={dispenseType}
-          onChange={onDispenseType}
-          items={[
-            { value: "원외", label: "원외 (약국)" },
-            { value: "원내", label: "원내 (진료비 포함)" },
-          ]}
-        />
-      )}
-      <input
-        autoFocus
-        value={q}
-        onChange={(e) => {
-          setQ(e.target.value);
-          setDrug(null);
-        }}
-        placeholder={placeholder}
-        className="h-11 rounded-lg border border-line/60 bg-white px-3 text-item outline-none focus:border-navy"
-      />
-      {active.isPending ? (
-        <Skeleton rows={3} />
-      ) : active.isError ? (
-        <ErrorState title="검색하지 못했습니다" cause="잠시 뒤 다시 시도하세요." />
-      ) : (active.data?.length ?? 0) === 0 ? (
-        <EmptyState title="검색 결과가 없습니다" description="등록된 항목만 고를 수 있습니다. 없는 항목은 기준 정보에서 먼저 등록해야 합니다." />
-      ) : (
-        <ul className="flex max-h-80 flex-col overflow-y-auto rounded-lg border border-skeleton">
-          {mode === "disease" &&
-            diseases.data!.map((d) => (
-              <ResultRow key={d.diseaseCode} added={added.disease.includes(d.diseaseCode)} onPick={() => onAddDisease(d.diseaseCode, d.name)}>
-                <span>
-                  <span className="font-semibold">{d.diseaseCode}</span> {d.name}
-                </span>
-              </ResultRow>
-            ))}
-          {mode === "drug" &&
-            drugs.data!.map((d) => (
-              <ResultRow key={d.drugCode} added={added.drug.includes(d.drugCode)} selected={drug?.drugCode === d.drugCode} onPick={() => setDrug(d)}>
-                <span>
-                  <span className="font-semibold">{d.drugCode}</span> {d.name} <span className="text-caption text-ink-sub">· {d.form} · {d.unit}</span>
-                </span>
-                <span className="text-caption text-ink-sub">{won(d.unitPrice)}</span>
-              </ResultRow>
-            ))}
-          {mode === "exam" &&
-            examItems.data!.map((x) => (
-              <ResultRow key={x.examCode} added={added.exam.includes(x.examCode)} onPick={() => onAddExam({ examCode: x.examCode, name: x.name, fee: x.fee })}>
-                <span>
-                  <span className="font-semibold">{x.examCode}</span> {x.name} <span className="text-caption text-ink-sub">· {x.category}</span>
-                </span>
-                <span className="text-caption text-ink-sub">{won(x.fee)}</span>
-              </ResultRow>
-            ))}
-        </ul>
-      )}
-      {mode === "drug" && drug && !added.drug.includes(drug.drugCode) && (
-        <DoseForm
-          drug={drug}
-          onAdd={(item) => {
-            onAddDrug(item);
-            setDrug(null);
-          }}
-        />
-      )}
-    </Card>
-  );
-}
-
-function ResultRow({ children, added, selected, onPick }: { children: React.ReactNode; added: boolean; selected?: boolean; onPick: () => void }) {
-  return (
-    <li className="border-b border-skeleton last:border-0">
-      <button
-        type="button"
-        disabled={added}
-        onClick={onPick}
-        className={cx("flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left text-body", selected ? "bg-select-bg" : "hover:bg-page", added && "cursor-not-allowed opacity-60")}
-      >
-        {children}
-        {added && <span className="text-caption font-semibold text-positive">추가됨</span>}
-      </button>
-    </li>
-  );
-}
-
-/** 1회 투여량·1일 횟수·일수·용법. 숫자는 0보다 커야 하고 용법은 필수(CHECK, NOT NULL) */
-function DoseForm({ drug, onAdd }: { drug: Drug; onAdd: (item: DrugDraft) => void }) {
-  const [dose, setDose] = useState("1");
-  const [times, setTimes] = useState("3");
-  const [days, setDays] = useState("3");
-  const [instruction, setInstruction] = useState("식후 30분");
-  const valid = Number(dose) > 0 && Number.isInteger(Number(times)) && Number(times) >= 1 && Number.isInteger(Number(days)) && Number(days) >= 1 && instruction.trim().length > 0;
-  const input = "h-10 w-full rounded-lg border border-line/60 bg-white px-3 text-item outline-none focus:border-navy";
-
-  return (
-    <div className="flex flex-col gap-3 rounded-lg bg-page p-3">
-      <p className="text-body font-semibold">{drug.name}</p>
-      <div className="grid grid-cols-3 gap-2">
-        <label className="flex flex-col gap-1 text-caption text-ink-sub">
-          1회 투여량 ({drug.unit})
-          <input type="number" min={0.01} step={0.5} value={dose} onChange={(e) => setDose(e.target.value)} className={input} />
-        </label>
-        <label className="flex flex-col gap-1 text-caption text-ink-sub">
-          1일 횟수
-          <input type="number" min={1} step={1} value={times} onChange={(e) => setTimes(e.target.value)} className={input} />
-        </label>
-        <label className="flex flex-col gap-1 text-caption text-ink-sub">
-          일수
-          <input type="number" min={1} step={1} value={days} onChange={(e) => setDays(e.target.value)} className={input} />
-        </label>
-      </div>
-      <label className="flex flex-col gap-1 text-caption text-ink-sub">
-        용법
-        <input value={instruction} maxLength={100} onChange={(e) => setInstruction(e.target.value)} className={input} />
-      </label>
-      <Button
-        disabled={!valid}
-        onClick={() =>
-          onAdd({ drugCode: drug.drugCode, name: drug.name, unit: drug.unit, dose: Number(dose), timesPerDay: Number(times), durationDays: Number(days), instruction: instruction.trim() })
-        }
-      >
-        처방에 추가
-      </Button>
-    </div>
   );
 }
