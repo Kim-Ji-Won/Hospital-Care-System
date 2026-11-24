@@ -1,9 +1,11 @@
+"use client";
+
 /**
  * 공통 UI 부품. 디자인 기준(Figma) 규칙:
  * - 주색은 네이비, 주황은 오류 아이콘·테두리에만
  * - 상태 칩: 진행 중 파랑, 끝남 녹색, 없던 일(취소·노쇼) 회색, 주의(이상) 주황. 색만으로 구분하지 않고 글자를 함께 씀
  */
-import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from "react";
+import { useEffect, useRef, type ButtonHTMLAttributes, type InputHTMLAttributes, type KeyboardEvent, type ReactNode } from "react";
 
 function cx(...classes: (string | false | null | undefined)[]) {
   return classes.filter(Boolean).join(" ");
@@ -170,6 +172,7 @@ export function ConfirmDialog({
   confirmLabel,
   cancelLabel = "닫기",
   pending,
+  confirmDisabled,
   onConfirm,
   onCancel,
 }: {
@@ -179,44 +182,101 @@ export function ConfirmDialog({
   confirmLabel: string;
   cancelLabel?: string;
   pending?: boolean;
+  /** 서버가 이미 막은 뒤처럼, 다시 눌러도 소용없을 때 */
+  confirmDisabled?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
 }) {
-  if (!open) return null;
+  // 네이티브 <dialog>의 showModal: 포커스가 안으로 들어가고 Tab이 밖으로 나가지 않으며, 닫으면 원래 자리로 돌아감
+  const ref = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    if (open && !el.open) el.showModal();
+    if (!open && el.open) el.close();
+  }, [open]);
+
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-ink/30 p-4" onClick={pending ? undefined : onCancel}>
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label={title}
-        className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <p className="text-title font-bold text-navy">{title}</p>
-        {children && <div className="mt-3 text-body text-ink">{children}</div>}
-        <div className="mt-6 flex justify-end gap-2">
-          <Button variant="secondary" onClick={onCancel} disabled={pending}>
-            {cancelLabel}
-          </Button>
-          <Button onClick={onConfirm} disabled={pending}>
-            {pending ? "처리하는 중…" : confirmLabel}
-          </Button>
+    <dialog
+      ref={ref}
+      aria-label={title}
+      // Esc: 처리 중이 아니면 닫기
+      onCancel={(e) => {
+        e.preventDefault();
+        if (!pending) onCancel();
+      }}
+      // 바깥(배경)을 누르면 닫기. 대화상자 안쪽 클릭은 target이 안쪽 요소라 해당 없음
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !pending) onCancel();
+      }}
+      className="m-auto w-full max-w-md rounded-2xl bg-white p-0 shadow-xl backdrop:bg-ink/30"
+    >
+      {open && (
+        <div className="p-6">
+          <h2 className="text-title font-bold text-navy">{title}</h2>
+          {children && <div className="mt-3 text-body text-ink">{children}</div>}
+          <div className="mt-6 flex justify-end gap-2">
+            <Button variant="secondary" onClick={onCancel} disabled={pending} autoFocus>
+              {cancelLabel}
+            </Button>
+            <Button onClick={onConfirm} disabled={pending || confirmDisabled}>
+              {pending ? "처리하는 중…" : confirmLabel}
+            </Button>
+          </div>
         </div>
-      </div>
-    </div>
+      )}
+    </dialog>
   );
+}
+
+// ---------- 고를 수 있는 표 행 ----------
+
+/**
+ * 표 행을 눌러 오른쪽 패널에 여는 화면(S1, S3, S4, S5a, S5b, S6, S8)이 함께 씁니다.
+ * 마우스뿐 아니라 Tab으로 행에 가서 Enter·Space로 고를 수 있게 합니다.
+ */
+export function selectableRow(selected: boolean, onSelect: () => void, className?: string) {
+  return {
+    tabIndex: 0,
+    "aria-selected": selected,
+    onClick: onSelect,
+    onKeyDown: (e: KeyboardEvent<HTMLTableRowElement>) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        onSelect();
+      }
+    },
+    className: cx(
+      "cursor-pointer border-b border-skeleton outline-none hover:bg-page focus-visible:bg-select-bg focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-navy",
+      selected && "bg-select-bg hover:bg-select-bg",
+      className,
+    ),
+  };
 }
 
 // ---------- 탭 ----------
 
 export function Tabs<T extends string>({ value, onChange, items }: { value: T; onChange: (v: T) => void; items: { value: T; label: string }[] }) {
   return (
-    <div role="tablist" className="flex gap-1 border-b border-sky">
+    <div
+      role="tablist"
+      className="flex gap-1 border-b border-sky"
+      // 탭 사이는 ←·→로 움직임 (Tab 키로는 선택된 탭 하나에만 머묾)
+      onKeyDown={(e) => {
+        if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+        const i = items.findIndex((t) => t.value === value);
+        const next = items[(i + (e.key === "ArrowRight" ? 1 : items.length - 1)) % items.length];
+        onChange(next.value);
+        (e.currentTarget.querySelector(`[data-tab="${next.value}"]`) as HTMLElement | null)?.focus();
+      }}
+    >
       {items.map((t) => (
         <button
           key={t.value}
           type="button"
           role="tab"
+          data-tab={t.value}
+          tabIndex={value === t.value ? 0 : -1}
           aria-selected={value === t.value}
           onClick={() => onChange(t.value)}
           className={cx(

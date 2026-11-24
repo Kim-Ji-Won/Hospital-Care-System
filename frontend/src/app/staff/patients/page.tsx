@@ -12,7 +12,8 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { memberApi, memberKeys } from "@/lib/api/member";
 import type { PatientSearchItem } from "@/lib/api/types";
 import { patientNo, shortDate, shortDateTime } from "@/lib/date";
-import { Button, Card, Chip, EmptyState, ErrorState, PageHeader, Skeleton, cx } from "@/components/ui";
+import { josa } from "@/lib/josa";
+import { Button, Card, Chip, EmptyState, ErrorState, PageHeader, Skeleton, selectableRow } from "@/components/ui";
 
 const maskPhone = (phone: string) => phone.replace(/^(\d+)-(\d+)-(\d+)$/, (_, a, _b, c) => `${a}-••••-${c}`);
 const birthLabel = (p: PatientSearchItem) => `${p.birthDate.replaceAll("-", ". ")} · ${p.gender}`;
@@ -36,7 +37,6 @@ export default function PatientsPage() {
       <label className="mb-5 flex flex-col gap-1.5">
         <span className="text-caption font-semibold text-ink-sub">이름, 환자번호, 연락처 뒷자리로 검색</span>
         <input
-          autoFocus
           value={input}
           maxLength={50}
           onChange={(e) => setInput(e.target.value)}
@@ -61,7 +61,7 @@ export default function PatientsPage() {
         <Skeleton rows={4} />
       ) : list.length === 0 ? (
         <EmptyState
-          title={`'${q}'으로 찾은 환자가 없습니다`}
+          title={`${josa(`'${q}'`, "으로/로")} 찾은 환자가 없습니다`}
           description="철자를 확인하거나 연락처 뒷자리로 다시 찾아보세요. 아직 가입하지 않은 분이면 웹 회원가입을 안내하세요."
           action={
             <Button variant="secondary" onClick={() => setInput("")}>
@@ -85,16 +85,14 @@ export default function PatientsPage() {
                 <th className="px-2 py-2.5 font-semibold">이름</th>
                 <th className="px-2 py-2.5 font-semibold">생년월일 · 성별</th>
                 <th className="px-2 py-2.5 font-semibold">연락처</th>
-                <th className="px-2 py-2.5" />
+                <th className="px-2 py-2.5"><span className="sr-only">입원 여부</span></th>
               </tr>
             </thead>
             <tbody>
               {list.map((p) => (
                 <tr
                   key={p.patientId}
-                  onClick={() => setSelectedId(p.patientId)}
-                  aria-selected={p.patientId === selectedId}
-                  className={cx("cursor-pointer border-b border-skeleton hover:bg-page", p.patientId === selectedId && "bg-select-bg hover:bg-select-bg")}
+                  {...selectableRow(p.patientId === selectedId, () => setSelectedId(p.patientId))}
                 >
                   <td className="px-2 py-2.5 font-bold text-ink">{patientNo(p.patientId)}</td>
                   <td className="px-2 py-2.5">{p.name}</td>

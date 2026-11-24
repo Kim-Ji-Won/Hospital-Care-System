@@ -130,7 +130,7 @@ function WeekGrid({ list, selectedId, onSelect }: { list: Schedule[]; selectedId
         </colgroup>
         <thead className="border-b border-sky text-caption text-ink-sub">
           <tr>
-            <th />
+            <th><span className="sr-only">시간대</span></th>
             {DAYS.map((d) => (
               <th key={d} className="py-2.5 font-semibold">
                 {d}
@@ -152,16 +152,17 @@ function WeekGrid({ list, selectedId, onSelect }: { list: Schedule[]; selectedId
                         type="button"
                         onClick={() => onSelect(s.scheduleId)}
                         aria-pressed={s.scheduleId === selectedId}
-                        aria-label={`${d}요일 ${hm(s.startTime)}~${hm(s.endTime)} ${s.slotMinutes}분 간격 일정 수정`}
                         className={cx(
                           "mb-1 flex w-full flex-col items-center rounded-lg py-1 text-caption font-medium",
                           s.scheduleId === selectedId ? "bg-navy text-white" : "bg-select-bg text-navy hover:bg-sky/40",
                         )}
                       >
+                        <span className="sr-only">{d}요일 </span>
                         <span>
                           {shortTime(s.startTime)}~{shortTime(s.endTime)}
                         </span>
                         <span>{s.slotMinutes}분</span>
+                        <span className="sr-only"> 간격, 일정 수정</span>
                       </button>
                     ))}
                 </td>

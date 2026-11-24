@@ -14,7 +14,7 @@ import type { Payment, PaymentMethod, PaymentStatus } from "@/lib/api/types";
 import { shortDate, shortDateTime, won } from "@/lib/date";
 import { includesText, paymentTitle } from "@/components/payment-text";
 import { patientLine } from "@/components/patient-label";
-import { Button, Card, Chip, ConfirmDialog, EmptyState, ErrorState, PageHeader, Skeleton, Tabs, cx } from "@/components/ui";
+import { Button, Card, Chip, ConfirmDialog, EmptyState, ErrorState, PageHeader, Skeleton, Tabs, cx, selectableRow } from "@/components/ui";
 
 const METHODS: PaymentMethod[] = ["카드", "현금", "계좌이체"];
 
@@ -147,8 +147,7 @@ function PaymentTable({ list, selectedId, onSelect }: { list: Payment[]; selecte
           {list.map((x) => (
             <tr
               key={x.paymentId}
-              onClick={() => onSelect(x.paymentId)}
-              className={cx("cursor-pointer border-b border-skeleton last:border-0 hover:bg-page", x.paymentId === selectedId && "bg-select-bg hover:bg-select-bg")}
+              {...selectableRow(x.paymentId === selectedId, () => onSelect(x.paymentId), "last:border-0")}
             >
               <td className="px-4 py-3 text-item">{paymentTitle(x)}</td>
               <td className="px-4 py-3 text-item font-semibold">{won(x.amount)}</td>
