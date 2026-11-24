@@ -77,7 +77,7 @@ $env:DB_PASSWORD="내비밀번호"; .\gradlew.bat build
 
 프론트의 `/api/*` 요청은 Next.js가 `http://localhost:8080`으로 넘겨줍니다. CORS 설정은 필요 없습니다.
 
-`frontend/.env.local`의 `NEXT_PUBLIC_API_MOCKING`에서 실제 백엔드로 보낼 영역을 고릅니다. 예: 회원·예약만 실제 백엔드로 보내려면 `member,reservation`. 자세한 값은 [`frontend/README.md`](../frontend/README.md)를 봅니다.
+`frontend/.env.local`의 `NEXT_PUBLIC_API_MOCKING`에 목 서버가 처리할 영역을 적습니다. 적지 않은 영역은 실제 백엔드로 갑니다. 예: 회원·예약만 목 서버로 보내려면 `member,reservation`. 자세한 값은 [`frontend/README.md`](../frontend/README.md)를 봅니다.
 
 ## 폴더 구조
 
