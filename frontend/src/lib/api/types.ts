@@ -441,3 +441,107 @@ export interface Staff {
   phone: string;
   loginId: string;
 }
+
+/** 6-4 결제 취소 응답: 취소로 보관한 결제 + 지금 단가로 다시 계산한 새 미결제 */
+export interface CancelPaymentResponse {
+  cancelled: Payment;
+  newPayment: Payment;
+}
+
+// ---------- 02 진료일정·휴진 (2-10 ~ 2-17) ----------
+
+/** 진료일정 객체 */
+export interface Schedule {
+  scheduleId: number;
+  doctorId: number;
+  doctorName: string;
+  dayOfWeek: DayOfWeek;
+  startTime: TimeOnly;
+  endTime: TimeOnly;
+  slotMinutes: number;
+  /** 이 일정을 쓰는 예약 수(상태 무관). 0일 때만 닫을 수 있음 */
+  reservationCount: number;
+  /** 지금 이후 '예약' 상태인 예약 수 */
+  upcomingCount: number;
+}
+
+export interface CreateScheduleRequest {
+  doctorId: number;
+  dayOfWeek: DayOfWeek;
+  startTime: TimeOnly;
+  endTime: TimeOnly;
+  slotMinutes: number;
+}
+
+export type UpdateScheduleRequest = Partial<Pick<CreateScheduleRequest, "startTime" | "endTime" | "slotMinutes">>;
+
+/** 2-15 휴진 영향, 2-16 실제 결과 */
+export interface DayOffImpact {
+  date: DateOnly;
+  reassigned: { reservationId: number; appointmentAt: DateTime; patient: PatientSummary; toDoctorId: number; toDoctorName: string }[];
+  cancelled: { reservationId: number; appointmentAt: DateTime; patient: PatientSummary }[];
+}
+
+export interface CreateDayOffRequest {
+  scheduleIds: number[];
+  offDate: DateOnly;
+  reason: string | null;
+}
+
+export interface CreateDayOffResponse extends Omit<DayOffImpact, "date"> {
+  dayOffs: DayOff[];
+}
+
+// ---------- 01 환자 검색·수정·이력 (1-9 ~ 1-11) ----------
+
+/** 1-9 환자 검색 결과 */
+export interface PatientSearchItem extends PatientSummary {
+  phone: string;
+  /** 지금 입원 중인지 (S3 '입원 중' 칩) */
+  admitted: boolean;
+}
+
+/** 1-10 환자 정보 수정: 고친 필드만 */
+export interface UpdatePatientRequest {
+  name?: string;
+  birthDate?: DateOnly;
+  gender?: Gender;
+  phone?: string;
+  address?: string | null;
+  bloodType?: string | null;
+}
+
+/** 1-11 환자 이력: 종류별 배열(각각 시각 내림차순). 화면이 한 표로 합침 */
+export interface PatientHistory {
+  reservations: { reservationId: number; appointmentAt: DateTime; status: ReservationStatus; departmentName: string; doctorName: string; symptomNote: string | null }[];
+  encounters: { encounterId: number; encounterAt: DateTime; encounterType: EncounterType; departmentName: string; doctorName: string; primaryDiseaseCode: string | null; primaryDiseaseName: string | null }[];
+  exams: { examId: number; examName: string; status: ExamStatus; requestedAt: DateTime; performedAt: DateTime | null; resultValue: number | null; unit: string | null; resultFlag: ResultFlag | null }[];
+  admissions: { admissionId: number; admittedAt: DateTime; dischargedAt: DateTime | null; roomNo: number; attendingName: string }[];
+  payments: { paymentId: number; encounterId: number; amount: number; status: PaymentStatus; createdAt: DateTime; paidAt: DateTime | null }[];
+}
+
+// ---------- 기준 정보 추가·수정 (1-12 ~ 1-14, 4-8 ~ 4-10, 5-8) ----------
+
+export interface CreateStaffRequest {
+  name: string;
+  phone: string;
+  jobType: JobType;
+  position: string | null;
+  departmentCode: string | null;
+  loginId: string;
+  password: string;
+}
+export type UpdateStaffRequest = Partial<Pick<CreateStaffRequest, "name" | "phone" | "position">>;
+export interface DepartmentInput {
+  departmentCode: string;
+  name: string;
+  location: string | null;
+  phone: string | null;
+}
+export interface DiseaseInput {
+  diseaseCode: string;
+  name: string;
+}
+export type DrugInput = Omit<Drug, never>;
+export type ExamItemInput = Omit<ExamItem, never>;
+export type RoomInput = Omit<Room, "occupiedBeds">;

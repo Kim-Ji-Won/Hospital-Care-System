@@ -1,10 +1,10 @@
-/** 02 예약 관리 목 핸들러 — docs/api/02-reservation.md 2-1 ~ 2-7 */
+/** 02 예약 관리 목 핸들러 — docs/api/02-reservation.md 2-1 ~ 2-9 */
 import { http, HttpResponse } from "msw";
 import type { CreateReservationRequest, DayOff } from "@/lib/api/types";
 import { now, today } from "@/lib/date";
 import { db, nextId, save } from "../db";
 import { apiError, requireRole, validationError } from "../http";
-import { bookingDates, bookingSlots, departmentOf, freeSchedulesAt, hasSlotTime, scheduleOf, staffOf, toMyReservation, toStaffReservation } from "../logic";
+import { bookingDates, bookingSlots, departmentOf, freeSchedulesAt, hasSlotTime, isFreeSlot, scheduleOf, staffOf, toMyReservation, toStaffReservation } from "../logic";
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const MONTH = /^\d{4}-\d{2}$/;
@@ -71,6 +71,45 @@ export const reservationHandlers = [
     d.reservations.push(row);
     save();
     return HttpResponse.json(toMyReservation(row), { status: 201 });
+  }),
+
+  // 2-8 예약 시간 변경: 같은 진료과 안에서, 새 시각의 빈 일정으로 다시 배정 (실패하면 아무것도 안 바뀜)
+  http.patch("/api/me/reservations/:reservationId", async ({ params, request }) => {
+    const { user, deny } = requireRole("환자");
+    if (deny) return deny;
+    const d = db();
+    const r = d.reservations.find((x) => x.reservation_id === Number(params.reservationId));
+    if (!r) return apiError(404, "NOT_FOUND", "없는 예약번호입니다.");
+    if (r.patient_id !== user.patientId) return apiError(403, "FORBIDDEN", "본인 예약만 바꿀 수 있습니다.");
+    if (r.status !== "예약") return apiError(409, "INVALID_STATUS", "'예약' 상태만 바꿀 수 있습니다.");
+    const { appointmentAt } = (await request.json()) as { appointmentAt?: string };
+    if (!appointmentAt || !DATETIME.test(appointmentAt)) return validationError({ appointmentAt: "예약일시를 보내세요." });
+    if (appointmentAt === r.appointment_at) return validationError({ appointmentAt: "지금 예약과 같은 시각입니다." });
+    const deptCode = staffOf(scheduleOf(r.schedule_id).doctor_id).department_code!;
+    if (appointmentAt <= now() || !hasSlotTime(deptCode, appointmentAt)) return validationError({ appointmentAt: "예약할 수 있는 시각이 아닙니다." });
+    if (d.reservations.some((x) => x.patient_id === user.patientId && x.appointment_at === appointmentAt && x.status !== "취소" && x.reservation_id !== r.reservation_id)) {
+      return apiError(409, "PATIENT_TIME_CONFLICT", "같은 시각에 다른 예약이 있습니다.");
+    }
+    const [date, time] = appointmentAt.split("T");
+    const [schedule] = freeSchedulesAt(deptCode, appointmentAt).filter((s) => isFreeSlot(s, date, time, r.reservation_id));
+    if (!schedule) return apiError(409, "SLOT_TAKEN", "그 시각의 빈 일정이 모두 찼습니다.");
+    r.schedule_id = schedule.schedule_id;
+    r.appointment_at = appointmentAt;
+    save();
+    return HttpResponse.json(toMyReservation(r));
+  }),
+
+  // 2-9 예약 취소: 행은 지우지 않고 '취소'로 (마감 시각 없음)
+  http.post("/api/me/reservations/:reservationId/cancel", ({ params }) => {
+    const { user, deny } = requireRole("환자");
+    if (deny) return deny;
+    const r = db().reservations.find((x) => x.reservation_id === Number(params.reservationId));
+    if (!r) return apiError(404, "NOT_FOUND", "없는 예약번호입니다.");
+    if (r.patient_id !== user.patientId) return apiError(403, "FORBIDDEN", "본인 예약만 취소할 수 있습니다.");
+    if (r.status !== "예약") return apiError(409, "INVALID_STATUS", "'예약' 상태만 취소할 수 있습니다.");
+    r.status = "취소";
+    save();
+    return HttpResponse.json(toMyReservation(r));
   }),
 
   // 2-4 내 예약 목록 (예약일시 내림차순)

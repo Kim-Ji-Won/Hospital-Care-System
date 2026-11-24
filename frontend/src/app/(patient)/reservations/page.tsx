@@ -1,19 +1,20 @@
 "use client";
 
 /**
- * P3 내 예약 — API 2-4
+ * P3 내 예약 + P3a 예약 변경·취소 — API 2-4, 2-9 (시간 변경 2-8은 /reservations/change)
  * 다가오는 예약과 지난 예약을 표 두 개로 나눠 보여 줍니다. 취소해도 행은 남고 상태 칩만 바뀝니다.
- * 시간 변경·취소(P3a, 2-8·2-9)는 3순위라 아직 버튼이 없습니다.
+ * 시간 변경·취소 버튼은 '예약' 상태에만 있고, 완료·취소·노쇼 행은 읽기 전용입니다.
  */
-import { Suspense } from "react";
+import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ApiError } from "@/lib/api/client";
 import { reservationApi, reservationKeys } from "@/lib/api/reservation";
 import type { MyReservation } from "@/lib/api/types";
 import { longDate, shortDateTime, timeOf, today } from "@/lib/date";
 import { QueryView } from "@/components/query-view";
-import { Chip, PageHeader } from "@/components/ui";
+import { Chip, ConfirmDialog, PageHeader } from "@/components/ui";
 
 export default function ReservationsPage() {
   const reservations = useQuery({ queryKey: reservationKeys.mine(), queryFn: reservationApi.mine });
@@ -55,14 +56,16 @@ export default function ReservationsPage() {
   );
 }
 
-/** 예약 직후(P2에서 ?created=번호로 넘어옴) 배정된 담당 의사를 알려 줌 */
+/** 예약·시간 변경 직후(?created=, ?changed=) 배정된 담당 의사를 알려 줌 */
 function CreatedBanner({ list }: { list: MyReservation[] }) {
-  const created = Number(useSearchParams().get("created"));
-  const r = list.find((x) => x.reservationId === created);
+  const params = useSearchParams();
+  const changed = Number(params.get("changed"));
+  const id = changed || Number(params.get("created"));
+  const r = list.find((x) => x.reservationId === id);
   if (!r) return null;
   return (
     <div role="status" className="rounded-xl border border-positive/30 bg-positive-bg px-5 py-4">
-      <p className="text-item font-bold text-positive">예약됐습니다</p>
+      <p className="text-item font-bold text-positive">{changed ? "예약 시간을 바꿨습니다" : "예약됐습니다"}</p>
       <p className="mt-1 text-body text-ink">
         {longDate(r.appointmentAt)} {timeOf(r.appointmentAt)} {r.departmentName}. 담당 의사는 {r.doctorName}입니다.
         {r.departmentLocation && ` 진료실은 ${r.departmentLocation}입니다.`}
@@ -86,7 +89,7 @@ function ReservationTable({ list }: { list: MyReservation[] }) {
         {upcoming.length === 0 ? (
           <p className="rounded-xl border border-sky bg-white px-5 py-4 text-body text-ink-sub">예정된 예약이 없습니다.</p>
         ) : (
-          <Rows list={upcoming} />
+          <Rows list={upcoming} withActions />
         )}
       </section>
       {past.length > 0 && (
@@ -99,8 +102,19 @@ function ReservationTable({ list }: { list: MyReservation[] }) {
   );
 }
 
-function Rows({ list }: { list: MyReservation[] }) {
+function Rows({ list, withActions }: { list: MyReservation[]; withActions?: boolean }) {
+  const queryClient = useQueryClient();
+  const [cancelling, setCancelling] = useState<MyReservation | null>(null);
+  const cancel = useMutation({
+    mutationFn: (r: MyReservation) => reservationApi.cancel(r.reservationId),
+    onSuccess: () => {
+      setCancelling(null);
+      queryClient.invalidateQueries({ queryKey: reservationKeys.all });
+    },
+  });
+
   return (
+    <>
     <div className="overflow-x-auto rounded-xl border border-sky bg-white">
       {/* 열 너비를 고정해 두 표의 칸이 같은 자리에 오게 하고, 남는 폭은 증상 메모가 가져감 */}
       <table className="w-full min-w-[760px] table-fixed text-left text-body break-keep">
@@ -110,6 +124,7 @@ function Rows({ list }: { list: MyReservation[] }) {
           <col className="w-28" />
           <col />
           <col className="w-24" />
+          {withActions && <col className="w-44" />}
         </colgroup>
         <thead className="border-b border-sky bg-page text-caption text-ink-sub">
           <tr>
@@ -118,6 +133,7 @@ function Rows({ list }: { list: MyReservation[] }) {
             <th className="px-5 py-3 font-semibold">담당의</th>
             <th className="px-5 py-3 font-semibold">증상 메모</th>
             <th className="px-5 py-3 font-semibold">상태</th>
+            {withActions && <th className="px-5 py-3" />}
           </tr>
         </thead>
         <tbody>
@@ -130,10 +146,58 @@ function Rows({ list }: { list: MyReservation[] }) {
               <td className="px-5 py-3.5">
                 <Chip>{r.status}</Chip>
               </td>
+              {withActions && (
+                <td className="px-5 py-3.5">
+                  {r.status === "예약" && (
+                    <div className="flex justify-end gap-1.5">
+                      <Link
+                        href={`/reservations/change?reservationId=${r.reservationId}`}
+                        className="inline-flex h-8 items-center rounded-lg border border-line bg-white px-3 font-semibold text-navy hover:bg-select-bg"
+                      >
+                        시간 변경
+                      </Link>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          cancel.reset();
+                          setCancelling(r);
+                        }}
+                        className="inline-flex h-8 items-center rounded-lg border border-line bg-white px-3 font-semibold text-navy hover:bg-select-bg"
+                      >
+                        취소
+                      </button>
+                    </div>
+                  )}
+                </td>
+              )}
             </tr>
           ))}
         </tbody>
       </table>
     </div>
+    <ConfirmDialog
+      open={!!cancelling}
+      title="예약을 취소할까요?"
+      cancelLabel="예약 유지"
+      confirmLabel="예약 취소"
+      pending={cancel.isPending}
+      onConfirm={() => cancelling && cancel.mutate(cancelling)}
+      onCancel={() => setCancelling(null)}
+    >
+      {cancelling && (
+        <>
+          <p>
+            {longDate(cancelling.appointmentAt)} {timeOf(cancelling.appointmentAt)} {cancelling.departmentName} · {cancelling.doctorName}
+          </p>
+          <p>취소하면 되돌릴 수 없고, 이 시간은 다른 분이 예약할 수 있습니다.</p>
+          {cancel.isError && (
+            <p className="mt-2 text-error-ink">
+              {cancel.error instanceof ApiError && cancel.error.code === "INVALID_STATUS" ? "이미 진료를 마쳤거나 취소된 예약입니다." : "취소하지 못했습니다. 예약은 그대로 있으니 잠시 뒤 다시 시도하세요."}
+            </p>
+          )}
+        </>
+      )}
+    </ConfirmDialog>
+    </>
   );
 }

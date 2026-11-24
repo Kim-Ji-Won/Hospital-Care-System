@@ -1,5 +1,14 @@
-import { ComingSoon } from "@/components/coming-soon";
+"use client";
 
-export default function Page() {
-  return <ComingSoon screen="S8" title="기준 정보" apis={["1-7", "4-5", "4-6", "4-7", "5-1"]} />;
+/** S8 기준 정보: 첫 탭(진료과)으로 보냄. 탭마다 주소가 따로 있습니다(/staff/master/drugs 등). */
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { Skeleton } from "@/components/ui";
+
+export default function MasterIndexPage() {
+  const router = useRouter();
+  useEffect(() => {
+    router.replace("/staff/master/departments");
+  }, [router]);
+  return <Skeleton rows={4} />;
 }
