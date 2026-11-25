@@ -29,7 +29,10 @@ public class AdmissionAssignmentService {
             """;
     private final JdbcClient jdbc;
 
-    public AdmissionAssignmentService(JdbcClient jdbc) {
+    private final AdmissionQueryService queries;
+
+    public AdmissionAssignmentService(JdbcClient jdbc, AdmissionQueryService queries) {
+        this.queries = queries;
         this.jdbc = jdbc;
     }
 
@@ -92,16 +95,7 @@ public class AdmissionAssignmentService {
                 """).param(request.decisionEncounterId()).param(request.attendingId()).param(request.roomNo())
                 .param(admittedAt).param(request.expectedDischargeDate()).param(request.reason().strip()).update();
 
-        return jdbc.sql("""
-                SELECT a.*, p.patient_id, p.name, p.birth_date, p.gender, s.name AS attending_name, r.ward
-                FROM admission a JOIN encounter e ON e.encounter_id = a.decision_encounter_id
-                JOIN patient p ON p.patient_id = e.patient_id JOIN staff s ON s.staff_id = a.attending_id
-                JOIN room r ON r.room_no = a.room_no WHERE a.decision_encounter_id = ?
-                """).param(request.decisionEncounterId()).query((rs, row) -> new AdmissionView(
-                        rs.getInt("admission_id"), patient(rs), rs.getInt("decision_encounter_id"),
-                        rs.getInt("attending_id"), rs.getString("attending_name"), rs.getInt("room_no"), rs.getString("ward"),
-                        rs.getObject("admitted_at", LocalDateTime.class), rs.getObject("expected_discharge_date", LocalDate.class),
-                        rs.getObject("discharged_at", LocalDateTime.class), rs.getString("reason"))).single();
+        return queries.forDecision(request.decisionEncounterId());
     }
 
     private static PatientSummary patient(ResultSet rs) throws SQLException {

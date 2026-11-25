@@ -1,5 +1,6 @@
 package com.hospital.backend.admission.controller;
 
+import com.hospital.backend.admission.dto.AdmissionDetail;
 import com.hospital.backend.admission.dto.AdmissionView;
 import com.hospital.backend.admission.dto.AssignAdmissionRequest;
 import com.hospital.backend.admission.dto.PendingAdmission;
@@ -7,6 +8,7 @@ import com.hospital.backend.admission.service.AdmissionAssignmentException;
 import com.hospital.backend.admission.service.AdmissionAssignmentException.ErrorBody;
 import com.hospital.backend.admission.service.AdmissionAssignmentException.Field;
 import com.hospital.backend.admission.service.AdmissionAssignmentService;
+import com.hospital.backend.admission.service.AdmissionQueryService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -20,10 +22,13 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/admissions")
-public class AdmissionAssignmentController {
+public class AdmissionController {
     private final AdmissionAssignmentService admissions;
 
-    public AdmissionAssignmentController(AdmissionAssignmentService admissions) {
+    private final AdmissionQueryService queries;
+
+    public AdmissionController(AdmissionAssignmentService admissions, AdmissionQueryService queries) {
+        this.queries = queries;
         this.admissions = admissions;
     }
 
@@ -35,13 +40,29 @@ public class AdmissionAssignmentController {
             throw new AdmissionAssignmentException(HttpStatus.UNAUTHORIZED, "UNAUTHENTICATED", "로그인이 필요합니다.", null);
         }
         if (!"의사".equals(role) && !"간호사".equals(role)) {
-            throw new AdmissionAssignmentException(HttpStatus.FORBIDDEN, "FORBIDDEN", "입원 배정 권한이 없습니다.", null);
+            throw new AdmissionAssignmentException(HttpStatus.FORBIDDEN, "FORBIDDEN", "입원 관리 권한이 없습니다.", null);
         }
     }
 
     @GetMapping("/pending")
     public List<PendingAdmission> pending() {
         return admissions.pending();
+    }
+
+    @GetMapping
+    public List<AdmissionView> list(@RequestParam(required = false) String current) {
+        if (current == null || "true".equals(current)) return queries.list(true);
+        if ("false".equals(current)) return queries.list(false);
+        throw AdmissionAssignmentException.invalid("current", "true 또는 false를 입력하세요.");
+    }
+
+    @GetMapping("/{admissionId}")
+    public AdmissionDetail detail(@PathVariable String admissionId) {
+        try {
+            return queries.detail(Integer.parseInt(admissionId));
+        } catch (NumberFormatException ex) {
+            throw AdmissionAssignmentException.invalid("admissionId", "정수 입원번호를 입력하세요.");
+        }
     }
 
     @PostMapping
